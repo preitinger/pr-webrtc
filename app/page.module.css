@@ -29,11 +29,10 @@
 .noUsers {
     font-style:italic;
 }
-.userList {
+.userListOuter {
+    overflow: hidden;
     border: 1px solid black;
     border-radius:1em;
-    background-color: bisque;
-    color:black;
     list-style-type:none;
     cursor: pointer;
     margin-left: 1em;
@@ -43,25 +42,39 @@
     padding: 0;
     width: 30ex;
 }
-
-.userListItem {
+.userList {
     background-color: bisque;
-    /* border-radius:1em; */
+    color:black;
+    max-height: 50vh;
+    overflow-y: scroll;
+}
+
+.userListItemOuter {
+    background-color: bisque;
+    border: none !important;
+    margin: 0;
+    padding: 4px;
+}
+
+.userListItemInner {
+    /* margin: 4px; */
+    border-radius: 1em;
     padding: 0.3em;
     padding-left: 1em;
     padding-right: 1em;
     /* border-style: outset; */
     overflow: hidden;
+    background: inherit;
 }
 
-.userListItem:first-child {
+.userListItemOuter:first-child {
     margin-top: 1em;
 }
-.userListItem:last-child {
+.userListItemOuter:last-child {
     margin-bottom:1em;
 }
 
-.userListItem:nth-child(odd) {
+.userListItemOuter:nth-child(odd) {
     background-color: rgb(218, 195, 167);
 }
 
@@ -71,7 +84,7 @@
     /* border-style: inset; */
 }
 
-.userListItem:hover {
+.userListItemInner:hover {
     /* font-size: 105% */
     padding-left: 1.1em;
     /* margin: 0;
@@ -85,24 +98,16 @@
     border-radius: 1em;
     padding: 1em;
 }
-.chatLinesBorder {
-    margin: 1em;
-    border:1px solid gray;
-    border-radius: 1em;
-    /* max-height: 80vh; */
-    overflow: hidden;
-    padding-right: 0;
-    padding-top: 0.5em;
-    padding-bottom: 0.5em;
-}
-.chatLines {
-    padding: 1em;
-    overflow-y: auto;
-    height: calc(70vh - 7em);
-}
 .hintLine {
     color: darkgreen;
+    font-size: smaller;
 }
 .errorLine {
     color: darkred;
+}
+
+.frozen {
+    border: gray;
+    background: lightgray;
+    color: gray;
 }

@@ -1,0 +1,15 @@
+.chatLinesBorder {
+    margin: 1em;
+    border:1px solid gray;
+    border-radius: 1em;
+    /* max-height: 80vh; */
+    overflow: hidden;
+    padding-right: 0;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+}
+.chatLines {
+    padding: 1em;
+    overflow-y: auto;
+    height: calc(70vh - 7em);
+}

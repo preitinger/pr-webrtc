@@ -1,4 +1,7 @@
-textarea, input, button {
+
+textarea,
+input,
+button {
     border-radius: 1em;
     padding: 1em;
     margin: 1em;
@@ -14,4 +17,14 @@ body {
 
 button {
     cursor: pointer;
+}
+
+button:disabled {
+    background-color: lightgray;
+}
+
+:focus {
+    border-radius: 1em;
+    outline: 1px dashed black;
+    outline-offset: 1px;
 }

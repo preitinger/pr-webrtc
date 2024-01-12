@@ -1,41 +1,26 @@
-import clientPromise from "@/app/lib/mongodb";
-import { NextRequest, NextResponse } from "next/server";
+import { ChatReq, ChatResp } from "@/app/_lib/chat";
+import { executeChatReq } from "@/app/_lib/chat/mongoDb";
+import { apiPOST } from "@/app/_lib/user-management-server/apiRoutesForServer";
+import { NextRequest } from "next/server";
 
-export interface ChatLine {
-    text: string;
-}
-export interface ChatRequest {
-    chatId: string;
-    lines: ChatLine[];
-}
-export interface ChatResponse {
-    lines: ChatLine[];
-}
+// const chatPost = (dbName: string) => async (req: ChatReq): Promise<ChatResp> => {
+//     const client = await clientPromise;
+//     const db = client.db(dbName);
 
-async function chatPost(dbName: string, chatReqProm: Promise<ChatRequest>): Promise<ChatResponse> {
-    const client = await clientPromise;
-    const db = client.db(dbName);
-    return {
-        lines: [
-            {
-                text: '1. Beispielzeile'
-            }
-        ]
-    };
+//     // verify access token
+    
 
-}
+//     // TODO nyi
+//     return {
+//         messages: [],
+//         lastMsgId: null
+//     }
 
-// TODO Ne, es ist hoechste Zeit, web sockets zu testen: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket?retiredLocale=de
-export async function POST(req: NextRequest) {
-    const clientProm = clientPromise;
-    const chatReq: ChatRequest = await req.json();
-    const client = await clientProm;
-    const chatBody: ChatResponse = {
-        lines: [
-            {
-                text: '1. Beispielzeile'
-            }
-        ]
-    }
-    return NextResponse.json(chatBody);
+// }
+
+// const chatDB = 'chats';
+// const chatExecutor = chatPost(chatDB);
+
+export function POST(req: NextRequest) {
+    return apiPOST<ChatReq, ChatResp>(req, executeChatReq);
 }
