@@ -1,8 +1,8 @@
 import { Collection, Condition, Db, FindCursor, WithId } from "mongodb";
-import { ChatEvent, ChatReq, ChatResp } from "../chat-common";
+import { ChatEvent, ChatReq, ChatResp } from "./chat-common";
 import { transformPasswd } from "../hash";
 import clientPromise from "../mongodb";
-import { EventDoc, ChatDoc, UserOnline } from "../chat-server";
+import { EventDoc, ChatDoc, UserOnline } from "./chat-server";
 import { ApiResp } from "../user-management-client/user-management-common/apiRoutesCommon";
 import { checkToken, executeLogin } from "../user-management-server/userManagementServer";
 
@@ -222,7 +222,7 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
 
     const msg = req.msg;
     if (msg != null) {
-        const nextEventId = await readAndIncrementNextEventId(req.chatId)
+        const nextEventId = await readAndIncrementNextEventId(req.chatId, req.user)
         const insertRes = await eventsCol.insertOne({
             type: 'ChatMsg',
             _id: nextEventId,
@@ -233,6 +233,8 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
             console.error('insert not acknowledged?!');
             throw new Error('Unexpected: insert not acknowledged');
         }
+    } else {
+        updateLastAction(req.chatId, req.user);
     }
 
     const events = await (
@@ -278,14 +280,22 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
     }
 }
 
-export async function readAndIncrementNextEventId(chatId: string): Promise<number> {
+/**
+ * 
+ * @param chatId reads and increments the field nextEventId.
+ * As a side effect, it also updates the field lastAction of user to the current time
+ * @param user 
+ * @returns 
+ */
+export async function readAndIncrementNextEventId(chatId: string, user: string): Promise<number> {
     const client = await clientPromise;
     const db = client.db('chats');
     const chatsCol = db.collection<ChatDoc>('chats');
 
     try {
         const res = await chatsCol.findOneAndUpdate({
-            _id: chatId
+            _id: chatId,
+            'usersOnline.name': user
         }, {
             // Attention! $inc does implicitly set nextEventId to 0 in the case of an upsert.
             // Adding an entry $setOnInsert for nextEventId is handled as an error by MongoDB!
@@ -298,6 +308,9 @@ export async function readAndIncrementNextEventId(chatId: string): Promise<numbe
             //     nextEventId: 1
             // }
 
+            $set: {
+                'usersOnline.$.lastAction': new Date()
+            }
         }, {
             upsert: true,
         })
@@ -306,4 +319,18 @@ export async function readAndIncrementNextEventId(chatId: string): Promise<numbe
         console.error(reason);
         throw reason;
     }
+}
+
+export async function updateLastAction(chatId: string, user: string) {
+    const chatsCol = await getChatsCol(getDb());
+    const res = await chatsCol.updateOne({
+        _id: chatId,
+        'usersOnline.name': user
+    }, {
+        $set: {
+            'usersOnline.$.lastAction': new Date()
+        }
+    })
+    if (!res.acknowledged) throw new Error('update for lastAction was not acknowledged!');
+    if (res.modifiedCount !== 1) throw new Error(`Unexpected modifiedCount of update for lastAction: ${res.modifiedCount}`);
 }

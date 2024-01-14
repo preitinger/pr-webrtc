@@ -13,6 +13,7 @@ export default function EscapableComp(props: PropsWithChildren<EscapableProps>):
         if (e.key === 'Escape') {
             props.onCancel();
             e.stopPropagation();
+            e.preventDefault();
         }
     }
     return (

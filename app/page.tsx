@@ -6,14 +6,15 @@ import { ForwardedRef, KeyboardEvent, KeyboardEventHandler, forwardRef, useEffec
 import ModalDialog from '@/components/ModalDialog';
 import EscapableFlexComp from '@/components/EscapableFlexComp';
 import { LoginReq, LoginResp } from './_lib/chat/login-common';
-import { ChatEvent, ChatReq, ChatResp } from './_lib/chat-common';
+import { ChatEvent, ChatReq, ChatResp } from './_lib/chat/chat-common';
 import { apiFetchPost } from './_lib/user-management-client/apiRoutesClient';
 import { ApiResp } from './_lib/user-management-client/user-management-common/apiRoutesCommon';
 import { LogoutReq, LogoutResp } from './_lib/chat/logout-common';
 import { userRegisterFetch } from './_lib/user-management-client/userManagementClient';
-import { ChatLine, ChatPanel } from './_lib/chat/chat-client';
+import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
 
 const timeoutMs = 2000;
+// const timeoutMs = 200000;
 const chatId = 'pr-webrtc';
 
 interface LoginState {
@@ -178,9 +179,11 @@ export default function Home() {
 
     const [chatInput, setChatInput] = useState<string>('');
 
-    const [chatLines, setChatLines] = useState<ChatLine[]>(exampleLines());
+    const [chatLines, setChatLines] = useState<ChatLine[]>([]);
     const [scrollDown, setScrollDown] = useState<boolean>(true);
     const [chatInputFrozen, setChatInputFrozen] = useState<boolean>(true);
+    const [connectionError, setConnectionError] = useState<boolean>(false);
+    const [connectionErrorConfirmed, setConnectionErrorConfirmed] = useState<boolean>(false);
 
     const loginInputRef = useRef<HTMLInputElement | null>(null);
     const chatLinesRef = useRef<HTMLDivElement | null>(null);
@@ -355,8 +358,19 @@ export default function Home() {
             }
 
         }).catch(reason => {
-            console.error('Error', reason);
-            alert('Error (on server?)' + JSON.stringify(reason));
+            if (reason instanceof Error) {
+                if (reason.message === 'Failed to fetch') {
+                    pushErrorLine('No connection to the server.')
+                    setConnectionError(true);
+                    setConnectionErrorConfirmed(false);
+                } else {
+                    pushErrorLine(`Unknown server error (${reason.name}): ${reason.message}`)
+                }
+            } else {
+                console.error('Caught in apiFetchPost: Error', reason);
+                pushErrorLine('Caught unknown in apiFetchPost: ' + JSON.stringify(reason));
+            }
+            // alert('Error (on server?)' + JSON.stringify(reason));
             requestStateRef.current = 'waiting on error';
             setChatInputFrozen(true);
         });
@@ -549,7 +563,18 @@ export default function Home() {
         }).then((logOutRes: ApiResp<LogoutResp>) => {
             console.log('logoutResp', logOutRes);
             afterLogoutOrLostSession();
+        }).catch(reason => {
+            console.log('reason', reason);
         })
+    }
+
+    function onRetryConnect() {
+        if (requestStateRef.current === 'waiting on error') {
+            console.log('vor executeRequest', requestStateRef.current);
+            executeRequest();
+            setConnectionError(false);
+            setChatInputFrozen(false);
+        }
     }
 
     return (
@@ -557,14 +582,22 @@ export default function Home() {
             <header className={styles.header}>pr-webRTC - a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</header>
             <main className={styles.main}>
                 <div className={styles.left}>
-                    <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} />
+                    {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
+                    <ChatUserListComp userListState={userList} onClick={onUserClick} onKey={onUserKey} />
                     <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
                     <button onClick={onLogout}>Logout</button>
                 </div>
                 <div className={styles.right}>
-                    <ChatPanel ref={chatLinesRef} lines={chatLines} onScroll={onScroll} />
+                    <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} />
                     <input readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
-                    <button onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                    {
+                        !(connectionError && connectionErrorConfirmed) &&
+                        <button onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                    }
+                    {
+                        (connectionError && connectionErrorConfirmed) &&
+                        <button onClick={onRetryConnect}>Try again</button>
+                    }
                 </div>
             </main>
             {
@@ -584,6 +617,16 @@ export default function Home() {
                     </EscapableFlexComp>
                 </ModalDialog>
 
+            }
+            {
+                connectionError && !connectionErrorConfirmed &&
+                <ModalDialog>
+                    <h2>No connection to the server</h2>
+                    <p>{'Please ensure you are connected to the internet and then click on "Try again"'}</p>
+                    <button onClick={() => {
+                        setConnectionErrorConfirmed(true);
+                    }}>OK</button>
+                </ModalDialog>
             }
         </>
     )
