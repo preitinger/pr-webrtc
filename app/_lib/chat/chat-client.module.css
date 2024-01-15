@@ -3,13 +3,14 @@
     border:1px solid gray;
     border-radius: 1em;
     /* max-height: 80vh; */
-    overflow: hidden;
+    /* overflow: hidden; */
     --chat-lines-border-hor: 0;
     --chat-lines-border-vert: 0.5em;
     padding-left: var(--chat-lines-border-hor);
     padding-right: var(--chat-lines-border-hor);
     padding-top: var(--chat-lines-border-vert);
     padding-bottom: var(--chat-lines-border-vert);
+    height: auto;
 }
 .chatLinesBorder:focus-within {
     border-radius: 1em;
@@ -19,8 +20,8 @@
 }
 .chatLines {
     padding: 1em;
-    overflow-y: auto;
     height: calc(70vh - 7em);
+    overflow-y: scroll;
 }
 
 .chatLines:focus {

@@ -61,6 +61,7 @@ export async function executeLogin(req: LoginReq): Promise<ApiResp<LoginResp>> {
     })
 
     let users: UserOnline[];
+    let eventIdForUsers = -1;
 
     if (oldChatDoc != null) {
         const eventsCol = await eventsColProm;
@@ -71,20 +72,24 @@ export async function executeLogin(req: LoginReq): Promise<ApiResp<LoginResp>> {
         })
         if (!insRes.acknowledged) throw new Error('insertion of UserEntered event not acknowledged?!');
         users = oldChatDoc.usersOnline;
+        eventIdForUsers = oldChatDoc.nextEventId;
     } else {
-        users = (await chatsCol.findOne({
+        const chatDoc = await chatsCol.findOne({
             _id: req.chatId
         }, {
             projection: {
-                usersOnline: 1
+                usersOnline: 1,
+                nextEventId: 1
             }
-        }))?.usersOnline ?? []
+        });
+        users = (chatDoc)?.usersOnline ?? []
+        eventIdForUsers = chatDoc?.nextEventId ?? -1;
     }
 
     return {
         type: 'success',
         token: userManagementLoginResp.token,
         users: users.map(u => u.name),
-        eventIdForUsers: -1
+        eventIdForUsers: eventIdForUsers
     }
 }

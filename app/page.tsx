@@ -12,6 +12,7 @@ import { ApiResp } from './_lib/user-management-client/user-management-common/ap
 import { LogoutReq, LogoutResp } from './_lib/chat/logout-common';
 import { userRegisterFetch } from './_lib/user-management-client/userManagementClient';
 import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
+import { VideoComp } from './_lib/video/video-client';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
@@ -62,6 +63,10 @@ function exampleLines() {
     return lines;
 }
 
+type RTCRef = {
+    peerConnection: RTCPeerConnection | null;
+}
+
 export default function Home() {
     const [loginState, setLoginState] = useState<LoginState>({
         ownUser: null
@@ -83,6 +88,8 @@ export default function Home() {
     const [connectionError, setConnectionError] = useState<boolean>(false);
     const [connectionErrorConfirmed, setConnectionErrorConfirmed] = useState<boolean>(false);
 
+    const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+
     const loginInputRef = useRef<HTMLInputElement | null>(null);
     const chatLinesRef = useRef<HTMLDivElement | null>(null);
     const chatInputRef = useRef<HTMLInputElement | null>(null);
@@ -92,8 +99,13 @@ export default function Home() {
     const requestStateRef = useRef<RequestState>('logging in');
     const ownUserRef = useRef<string | null>(null);
     const sessionTokenRef = useRef<string | null>(null);
+    const eventIdForUsers = useRef<number>(-1);
+    const rtcRef = useRef<RTCRef>({
+        peerConnection: null
+    })
 
-    function processChatLines(m: ChatEvent[]) {
+    function processChatLines(m: ChatEvent[], lastEventId: number | null) {
+        // Voraussetzung: { m.length > 0 ==> lastEventId != null }
         setChatLines(d => [...d, ...(
             m.map(msg => (msg.type === 'ChatMsg' ? {
                 className: '',
@@ -107,11 +119,11 @@ export default function Home() {
             }))
         )])
 
-        m.forEach(d => {
-            if (d.type === 'UserEntered') {
-                console.log('add ', d.user);
+        const firstEventId = (lastEventId ?? -1) - m.length + 1;
+
+        m.forEach((d, i) => {
+            if (d.type === 'UserEntered' && firstEventId + i >= eventIdForUsers.current) {
                 setUserList(l => {
-                    console.log('old l', JSON.stringify(l));
                     const foundUser = l.users.find(u => u.name === d.user);
                     if (foundUser == null) {
                         const newL = {
@@ -120,19 +132,14 @@ export default function Home() {
                                 name: d.user
                             }]
                         }
-                        console.log('new l', JSON.stringify(newL));
                         return newL;
                     }
-                    console.log('l unchanged');
                     return l;
                 });
-            } else if (d.type === 'UserLeft') {
-                console.log('remove ', d.user);
+            } else if (d.type === 'UserLeft' && firstEventId + i >= eventIdForUsers.current) {
                 setUserList(l => {
-                    console.log('old l', JSON.stringify(l));
                     const removedIdx = l.users.findIndex(u => u.name === d.user);
                     if (removedIdx === -1) {
-                        console.log('l not changed because removedIdx -1');
                         return l;
                     }
                     const newL = {
@@ -140,7 +147,6 @@ export default function Home() {
                         users: [...l.users.filter((v, i) => i !== removedIdx)],
                         selected: removedIdx < l.selected ? l.selected - 1 : removedIdx === l.selected ? -1 : l.selected
                     }
-                    console.log('newL', JSON.stringify(newL));
                     return newL;
                 });
             }
@@ -169,6 +175,8 @@ export default function Home() {
     }
 
     function onUserKey(e: KeyboardEvent<HTMLElement>) {
+        // TODO call user on enter?
+        // But if user is called on enter, current behavior to toggle selection on enter (as well as on space) must be changed in chat-client.tsx
         console.log('onUserKey key', e.key);
     }
 
@@ -215,13 +223,15 @@ export default function Home() {
         apiFetchPost<ChatReq, ChatResp>('/api/chat', req).then(resp => {
             if (resp.type === 'error') {
                 console.error('Error on server', resp.error);
-                alert('Error on server: ' + resp.error)
+                pushErrorLine('Error on server: ' + resp.error);
                 requestStateRef.current = 'waiting on error';
                 setChatInputFrozen(true);
+                setConnectionError(true);
+                setConnectionErrorConfirmed(false);
                 return;
             } else if (resp.type === 'success') {
                 console.log('chat resp', resp);
-                processChatLines(resp.events);
+                processChatLines(resp.events, resp.lastEventId);
                 lastEventIdRef.current = resp.lastEventId;
                 console.log('last eventId', lastEventIdRef.current);
 
@@ -259,8 +269,6 @@ export default function Home() {
             if (reason instanceof Error) {
                 if (reason.message === 'Failed to fetch') {
                     pushErrorLine('No connection to the server.')
-                    setConnectionError(true);
-                    setConnectionErrorConfirmed(false);
                 } else {
                     pushErrorLine(`Unknown server error (${reason.name}): ${reason.message}`)
                 }
@@ -271,7 +279,9 @@ export default function Home() {
             // alert('Error (on server?)' + JSON.stringify(reason));
             requestStateRef.current = 'waiting on error';
             setChatInputFrozen(true);
-        });
+            setConnectionError(true);
+            setConnectionErrorConfirmed(false);
+});
         if (lineToSendRef.current == null) {
             requestStateRef.current = 'fetching';
         } else {
@@ -300,6 +310,7 @@ export default function Home() {
                 })
                 ownUserRef.current = loginName;
                 sessionTokenRef.current = loginRes.token;
+                eventIdForUsers.current = loginRes.eventIdForUsers;
 
                 setChatLines(d => [
                     ...d,
@@ -475,6 +486,33 @@ export default function Home() {
         }
     }
 
+    // video effect:
+    useEffect(() => {
+        // const mediaConstraints = {
+        //     audio: true,
+        //     video: true
+        // }
+
+        // navigator.mediaDevices.getUserMedia(mediaConstraints).then(mediaStream => {
+        //     console.log('before setLocalMediaStream');
+        //     setLocalMediaStream(mediaStream);
+        // })
+
+    }, [])
+
+    function onTestMedia() {
+        const mediaConstraints = {
+            audio: true,
+            video: true
+        }
+
+        navigator.mediaDevices.getUserMedia(mediaConstraints).then(mediaStream => {
+            console.log('before setLocalMediaStream');
+            setLocalMediaStream(mediaStream);
+        })
+
+    }
+
     return (
         <>
             <header className={styles.header}>pr-webRTC - a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</header>
@@ -496,6 +534,11 @@ export default function Home() {
                         (connectionError && connectionErrorConfirmed) &&
                         <button onClick={onRetryConnect}>Try again</button>
                     }
+                    <div>
+                        VideoComp for testing:
+                        <VideoComp mediaStream={localMediaStream} />
+                        <button onClick={onTestMedia}>Test Media</button>
+                    </div>
                 </div>
             </main>
             {

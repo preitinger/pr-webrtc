@@ -1,4 +1,4 @@
-import { ForwardedRef, KeyboardEvent, forwardRef, useEffect, useRef, useState } from "react";
+import { ForwardedRef, KeyboardEvent, PropsWithRef, forwardRef, useEffect, useRef, useState } from "react";
 import styles from './chat-client.module.css'
 
 export interface ChatLine {
