@@ -24,6 +24,10 @@
     overflow-y: scroll;
 }
 
+.chatLinesSmall {
+    height: calc(35vh - 7em);
+}
+
 .chatLines:focus {
     outline: none; /* because the parent .chatLinesBorder is outlined */
 }
@@ -35,7 +39,6 @@
     overflow: hidden;
     border: 1px solid black;
     border-radius:1em;
-    list-style-type:none;
     cursor: pointer;
     margin-left: 1em;
     margin-right: 1em;
@@ -45,10 +48,16 @@
     width: 30ex;
 }
 .userList {
+    list-style-type:none;
     background-color: bisque;
     color:black;
     max-height: 50vh;
     overflow-y: scroll;
+    padding-left: 0;
+}
+
+.userListSmall {
+    max-height: 25vh;
 }
 
 .userListItemOuter {

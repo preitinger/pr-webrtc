@@ -8,6 +8,7 @@ export interface ChatLine {
 
 export interface ChatPanelProps {
     lines: ChatLine[];
+    small: boolean;
     onScroll: () => void;
 }
 
@@ -17,13 +18,13 @@ export const ChatPanelComp = forwardRef(
             <div className={styles.chatLinesBorder}>
                 <div
                     ref={ref}
-                    className={styles.chatLines}
+                    className={`${styles.chatLines} ${props.small && styles.chatLinesSmall}`}
                     onScroll={(e => { props.onScroll(); })}
                     tabIndex={0}
                 >
                     {
                         props.lines.map((line, i) =>
-                            <p key={i} className={line.className}>{line.text}</p>)
+                            <p key={i} className={`${line.className}${props.small ? ' ' + styles.small : ''}`}>{line.text}</p>)
                     }
                 </div>
             </div>
@@ -95,6 +96,7 @@ export interface UserListState {
 
 export interface ChatUserListProps {
     userListState: UserListState;
+    small: boolean;
     onClick: (idx: number) => void;
     onKey: (e: KeyboardEvent<HTMLElement>) => void;
 
@@ -106,8 +108,8 @@ export function ChatUserListComp(props: ChatUserListProps) {
     return (
         <div>
             <label>Users:</label>
-            <ul role='listbox' className={styles.userListOuter}>
-                <div className={styles.userList}>
+            <div role='listbox' className={styles.userListOuter}>
+                <ul className={`${styles.userList} ${props.small && styles.userListSmall}`}>
                     {
                         props.userListState.users.length === 0 ?
                             <li role='option' aria-selected={false} className={styles.noUsers} >No users online</li> :
@@ -145,8 +147,8 @@ export function ChatUserListComp(props: ChatUserListProps) {
                                     }} />
                             ))
                     }
-                </div>
-            </ul>
+                </ul>
+            </div>
         </div>
     )
 }

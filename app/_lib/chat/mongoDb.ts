@@ -247,8 +247,8 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
             })
     ).toArray();
 
-    console.log('req.lastEventId', req.lastEventId);
-    console.log('found events', events);
+    // console.log('req.lastEventId', req.lastEventId);
+    // console.log('found events', events);
 
     const eventValues: ChatEvent[] = [];
     let lastId = req.lastEventId;

@@ -13,6 +13,9 @@ import { LogoutReq, LogoutResp } from './_lib/chat/logout-common';
 import { userRegisterFetch } from './_lib/user-management-client/userManagementClient';
 import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
 import { VideoComp } from './_lib/video/video-client';
+import { RTCRef, openPeerConnection } from './_lib/myWebRTC/myWebRTC-client';
+import { CheckCallReq, OfferCallReq, OfferCallResp, RejectCallReq } from "./_lib/video/video-common";
+import { TestReq as TestReq, TestResp as TestResp } from './api/tests/testOfferCall/types';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
@@ -63,10 +66,6 @@ function exampleLines() {
     return lines;
 }
 
-type RTCRef = {
-    peerConnection: RTCPeerConnection | null;
-}
-
 export default function Home() {
     const [loginState, setLoginState] = useState<LoginState>({
         ownUser: null
@@ -88,7 +87,11 @@ export default function Home() {
     const [connectionError, setConnectionError] = useState<boolean>(false);
     const [connectionErrorConfirmed, setConnectionErrorConfirmed] = useState<boolean>(false);
 
+    const [videoCall, setVideoCall] = useState<boolean>(false);
     const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+    const [remoteMediaStream, setRemoteMediaStream] = useState<MediaStream | null>(null);
+    const [testCaller, setTestCaller] = useState<string>('');
+    const [testCallee, setTestCallee] = useState<string>('');
 
     const loginInputRef = useRef<HTMLInputElement | null>(null);
     const chatLinesRef = useRef<HTMLDivElement | null>(null);
@@ -180,10 +183,14 @@ export default function Home() {
         console.log('onUserKey key', e.key);
     }
 
+
     function onCall() {
         if (userList.selected === -1) {
             alert('Please select a user in the list, first.')
+            return;
         }
+        openPeerConnection(rtcRef.current);
+        setVideoCall(true);
     }
 
     function onDlgCancel() {
@@ -281,7 +288,7 @@ export default function Home() {
             setChatInputFrozen(true);
             setConnectionError(true);
             setConnectionErrorConfirmed(false);
-});
+        });
         if (lineToSendRef.current == null) {
             requestStateRef.current = 'fetching';
         } else {
@@ -500,6 +507,7 @@ export default function Home() {
 
     }, [])
 
+    // TODO remove onTestMedia:
     function onTestMedia() {
         const mediaConstraints = {
             audio: true,
@@ -519,31 +527,134 @@ export default function Home() {
             <main className={styles.main}>
                 <div className={styles.left}>
                     {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
-                    <ChatUserListComp userListState={userList} onClick={onUserClick} onKey={onUserKey} />
+                    <ChatUserListComp key='userList' userListState={userList} small={videoCall} onClick={onUserClick} onKey={onUserKey} />
                     <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
                     <button onClick={onLogout}>Logout</button>
+                    {
+                        videoCall &&
+                        <>
+                            <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
+                            <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
+                            {
+                                !(connectionError && connectionErrorConfirmed) &&
+                                <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                            }
+                            {
+                                (connectionError && connectionErrorConfirmed) &&
+                                <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
+                            }
+                        </>
+                    }
                 </div>
                 <div className={styles.right}>
-                    <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} />
-                    <input readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
+                    <div>
+                        <h1>Tests</h1>
+                        <label>Caller <input key='testCaller' value={testCaller} onChange={(e) => { setTestCaller(e.target.value) }} /></label>
+                        <label>Callee <input key='testCallee' value={testCallee} onChange={(e) => { setTestCallee(e.target.value) }} /></label>
+                        <button onClick={async () => {
+                            const ownUser = ownUserRef.current;
+                            if (ownUser == null) return;
+                            const ownToken = sessionTokenRef.current;
+                            if (ownToken == null) return;
+                            const req: TestReq = {
+                                user: ownUser,
+                                token: ownToken,
+                                req: {
+                                    type: 'offerCall',
+                                    caller: testCaller,
+                                    callee: testCallee,
+                                    description: {bla: 'bla'},
+                                    candidates: [{'candidate-of-caller': 'bla'}]
+                                }
+                            }
+                            const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
+                            alert('resp: ' + JSON.stringify(resp));
+
+                        }}>offerCall</button>
+                        <button onClick={async () => {
+                            const ownUser = ownUserRef.current;
+                            if (ownUser == null) return;
+                            const ownToken = sessionTokenRef.current;
+                            if (ownToken == null) return;
+
+                            const checkCallReq: CheckCallReq = {
+                                type: 'checkCall',
+                                callee: testCallee,
+                            };
+                            const req: TestReq = {
+                                user: ownUser,
+                                token: ownToken,
+                                req: checkCallReq
+                            }
+                            const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
+                            alert('resp: ' + JSON.stringify(resp));
+                        }}>checkCall
+                        </button>
+                        <button onClick={async () => {
+                            const ownUser = ownUserRef.current;
+                            if (ownUser == null) return;
+                            const ownToken = sessionTokenRef.current;
+                            if (ownToken == null) return;
+                            const req: TestReq = {
+                                user: ownUser,
+                                token: ownToken,
+                                req: {
+                                    type: 'acceptCall',
+                                    caller: testCaller,
+                                    callee: testCallee,
+                                    description: {bla: 'blubb'},
+                                    candidates: [{'test-candidate': 1}, {'test-candidate': 2}]
+                                }
+                            }
+                            const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
+                            alert('resp: ' + JSON.stringify(resp));
+
+                        }}>acceptCall</button>
+                        <button onClick={async () => {
+                            const ownUser = ownUserRef.current;
+                            if (ownUser == null) return;
+                            const ownToken = sessionTokenRef.current;
+                            if (ownToken == null) return;
+
+                            const rejectCallReq: RejectCallReq = {
+                                type: 'rejectCall',
+                                caller: testCaller,
+                                callee: testCallee
+                            };
+                            const req: TestReq = {
+                                user: ownUser,
+                                token: ownToken,
+                                req: rejectCallReq
+                            }
+                            const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
+                            alert('resp: ' + JSON.stringify(resp));
+
+                        }}>rejectCall</button>
+                    </div>
                     {
-                        !(connectionError && connectionErrorConfirmed) &&
-                        <button onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
-                    }
-                    {
-                        (connectionError && connectionErrorConfirmed) &&
-                        <button onClick={onRetryConnect}>Try again</button>
+                        !videoCall &&
+                        <>
+                            <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
+                            <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
+                            {
+                                !(connectionError && connectionErrorConfirmed) &&
+                                <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                            }
+                            {
+                                (connectionError && connectionErrorConfirmed) &&
+                                <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
+                            }
+                        </>
                     }
                     <div>
-                        VideoComp for testing:
-                        <VideoComp mediaStream={localMediaStream} />
-                        <button onClick={onTestMedia}>Test Media</button>
+                        <VideoComp key='localMedia' mediaStream={localMediaStream} />
+                        <VideoComp key='remoteMedia' mediaStream={remoteMediaStream} />
                     </div>
                 </div>
             </main>
             {
                 loginState.ownUser == null &&
-                <ModalDialog>
+                <ModalDialog key='loginDlg'>
                     <EscapableFlexComp onCancel={onDlgCancel}>
                         <label>User</label>
                         <input ref={loginInputRef} value={loginName} onChange={(e) => {
@@ -561,7 +672,7 @@ export default function Home() {
             }
             {
                 connectionError && !connectionErrorConfirmed &&
-                <ModalDialog>
+                <ModalDialog key='conDlg'>
                     <h2>No connection to the server</h2>
                     <p>{'Please ensure you are connected to the internet and then click on "Try again"'}</p>
                     <button onClick={() => {

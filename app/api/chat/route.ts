@@ -1,4 +1,4 @@
-import { ChatReq, ChatResp } from "@/app/_lib/chat";
+import { ChatReq, ChatResp } from "@/app/_lib/chat/chat-common";
 import { executeChatReq } from "@/app/_lib/chat/mongoDb";
 import { apiPOST } from "@/app/_lib/user-management-server/apiRoutesForServer";
 import { NextRequest } from "next/server";
