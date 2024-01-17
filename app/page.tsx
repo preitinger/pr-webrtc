@@ -16,7 +16,7 @@ import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-clie
 import { RTCRef, openPeerConnection } from './_lib/myWebRTC/myWebRTC-client';
 import { CheckCallReq, OfferCallReq, OfferCallResp, RejectCallReq } from "./_lib/video/video-common";
 import { TestReq as TestReq, TestResp as TestResp } from './api/tests/testOfferCall/types';
-import { VideoComp, VideoToolbarComp } from './_lib/video/video-client';
+import { ToolbarData, VideoComp, VideoToolbarComp } from './_lib/video/video-client';
 import VideoManager, { ReceivedCall, VideoHandlers } from './_lib/video/VideoManager';
 
 const timeoutMs = 2000;
@@ -327,7 +327,7 @@ export default function Home() {
     }
 
     const videoManagerRef = useRef<VideoManager | null>(null);
-    const [receivedCall, setReceivedCall] = useState<ReceivedCall | null>(null);
+    const [toolbarData, setToolbarData] = useState<ToolbarData | null>(null);
 
     function onLogin() {
         const fetcher = accumulatedFetcher.current;
@@ -373,12 +373,11 @@ export default function Home() {
                     setChatInputFrozen(false);
                     {
                         const handlers: VideoHandlers = {
-                            onReceivedCall: (receivedCall1: ReceivedCall) => {
-                                setReceivedCall(receivedCall1);
+                            onToolbarData: (data: ToolbarData | null) => {
+                                setToolbarData(data);
                             },
-                            onVideoCall: (caller, callee) => {
-                                setVideoCall(true);
-                                alert('Not yet implemented: onVideoCall')
+                            onVideoCall: (active: boolean) => {
+                                setVideoCall(active);
                             },
                             onLocalStream: (s) => {
                                 setLocalMediaStream(s);
@@ -520,6 +519,8 @@ export default function Home() {
     }
 
     function afterLogoutOrLostSession() {
+        videoManagerRef.current?.close();
+        videoManagerRef.current = null;
         ownUserRef.current = null;
         sessionTokenRef.current = null;
         setLoginState({
@@ -545,6 +546,7 @@ export default function Home() {
         if (ownUserRef.current == null) return;
         if (sessionTokenRef.current == null) return;
         if (accumulatedFetcher.current == null) return;
+
         const req: LogoutReq = {
             type: 'logout',
             user: ownUserRef.current,
@@ -609,8 +611,17 @@ export default function Home() {
                 <div className={styles.left}>
                     {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
                     <ChatUserListComp key='userList' userListState={userList} small={videoCall} onClick={onUserClick} onKey={onUserKey} />
-                    <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
+                    {
+                        !videoCall &&
+                        <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
+                    }
                     <button onClick={onLogout}>Logout</button>
+                    {
+                        toolbarData != null &&
+                        <VideoToolbarComp data={toolbarData} onEvent={(e) => {
+                            videoManagerRef.current?.onVideoToolbarEvent(e);
+                        }} />
+                    }
                     {
                         videoCall &&
                         <>
@@ -628,7 +639,7 @@ export default function Home() {
                     }
                 </div>
                 <div className={styles.right}>
-                    <div>
+                    {/* <div>
                         <h1>Tests</h1>
                         <label>Caller <input key='testCaller' value={testCaller} onChange={(e) => { setTestCaller(e.target.value) }} /></label>
                         <label>Callee <input key='testCallee' value={testCallee} onChange={(e) => { setTestCallee(e.target.value) }} /></label>
@@ -711,7 +722,7 @@ export default function Home() {
                             alert('resp: ' + JSON.stringify(resp));
 
                         }}>rejectCall</button>
-                    </div>
+                    </div> */}
                     {
                         !videoCall &&
                         <>
@@ -728,10 +739,6 @@ export default function Home() {
                         </>
                     }
                     <div>
-                        <VideoToolbarComp receivedCall={receivedCall} onAccept={(accept) => {
-                            setReceivedCall(null);
-                            videoManagerRef.current?.onAccept(accept);
-                        }} />
                         <VideoComp key='localMedia' mediaStream={localMediaStream} />
                         <VideoComp key='remoteMedia' mediaStream={remoteMediaStream} />
                     </div>

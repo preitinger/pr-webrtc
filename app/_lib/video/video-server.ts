@@ -4,7 +4,7 @@
 import clientPromise from "../mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
 import { checkToken } from "../user-management-server/userManagementServer";
-import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
+import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
 
 const dbName = 'video';
 
@@ -40,10 +40,6 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
             upsert: true
         })
 
-        return {
-            type: 'success'
-        }
-
     } catch (reason: any) {
         if (reason.code === 11000) {
             return {
@@ -55,6 +51,34 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
                 error: JSON.stringify(reason)
             }
         }
+    }
+
+    try {
+        const res = await calleesCol.updateOne({
+            _id: o.caller,
+        }, {
+            $set: {
+                caller: o.caller
+            }
+        }, {
+            upsert: true
+        })
+        if (!res.acknowledged) {
+            return {
+                type: 'error',
+                error: 'setting callers dummy callee not acknowledged'
+            }
+        }
+
+        return {
+            type: 'success'
+        }
+    } catch (reason) {
+        return {
+            type: 'error',
+            error: JSON.stringify(reason)
+        }
+
     }
 }
 
@@ -193,6 +217,48 @@ export async function checkAccept(validatedUser: string, req: CheckAcceptReq): P
     }
 }
 
+export async function hangUp(validatedUser: string, req: HangUpReq): Promise<ApiResp<HangUpResp>> {
+    if (validatedUser !== req.caller && validatedUser !== req.callee) {
+        return {
+            type: 'error',
+            error: 'Error in hangUp: authFailed'
+        }
+    }
+
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const calleesCol = db.collection<Callee>('callees');
+
+    {
+        const res = await calleesCol.deleteOne({
+            _id: req.callee,
+            caller: req.caller
+        })
+    
+        if (!res.acknowledged) {
+            console.error('deleteOne for callee in hangUp not acknowledged');
+        }
+    
+    }
+
+    {
+        const res = await calleesCol.deleteOne({
+            _id: req.caller,
+            caller: req.caller
+        })
+        if (!res.acknowledged) {
+            console.error('deleteOne for caller\'s dummy in hangUp not acknowledged');
+        }
+    }
+
+
+
+    // Rueckgabe immer success weil es sonst kein sinnvolles Verhalten im Client gibt.
+    return {
+        type: 'success'
+    }
+}
+
 export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promise<ApiResp<WebRTCMsgResp>> {
     const client = await clientPromise;
     const db = client.db(dbName);
@@ -265,7 +331,7 @@ export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promi
 }
 
 
-export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | RejectCallReq | OfferCallReq | CheckAcceptReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | RejectCallResp | OfferCallResp | CheckAcceptResp | WebRTCMsgResp>> {
+export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | RejectCallReq | OfferCallReq | CheckAcceptReq | HangUpReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | RejectCallResp | OfferCallResp | CheckAcceptResp | HangUpResp | WebRTCMsgResp>> {
     if (!checkToken(req.ownUser, req.sessionToken)) {
         return {
             type: 'error',
@@ -283,6 +349,8 @@ export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<Ch
             return offerCall(req.ownUser, req.req);
         case 'checkAccept':
             return checkAccept(req.ownUser, req.req);
+        case 'hangUp':
+            return hangUp(req.ownUser, req.req);
         case 'webRTCMsg':
             return webRTCMsg(req.ownUser, req.req);
         // default: throw new Error(`Not yet implemented: ${req.req.type}`);

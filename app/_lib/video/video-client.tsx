@@ -26,24 +26,64 @@ export const VideoComp = (props: VideoProps) => {
     )
 }
 
+
+export type ToolbarData = {
+    type: 'receivedCall';
+    receivedCall: ReceivedCall
+} | {
+    type: 'ringing';
+    callee: string;
+} | {
+    type: 'videoCall'
+    caller: string;
+}
+
+export type VideoToolbarEvent = {
+    type: 'accept';
+    accept: boolean;
+} | {
+    type: 'hangUp';
+}
+
 export interface VideoToolbarProps {
-    receivedCall: ReceivedCall | null;
-    onAccept: (accept: boolean) => void;
+    data: ToolbarData;
+    onEvent: (e: VideoToolbarEvent) => void;
 }
 
 
-export function VideoToolbarComp({ receivedCall, onAccept }: VideoToolbarProps) {
+export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
 
 
     return (
         <div>
             {
-                receivedCall != null &&
+                data.type === 'receivedCall' && data.receivedCall != null &&
                 <>
-                    <span>Call from {receivedCall.caller}</span>
-                    <button onClick={() => onAccept(true)}>Accept</button>
-                    <button onClick={() => onAccept(false)}>Reject</button>
+                    <p className={styles.offer}>Offered video call from {data.receivedCall.caller}!</p>
+                    <button aria-roledescription="Accept call" title="Accept Call" className={styles.accept} onClick={() => onEvent({
+                        type: 'accept',
+                        accept: true
+                    })}></button>
+                    <button aria-roledescription="Reject call" title="Reject Call" className={styles.reject} onClick={() => onEvent({
+                        type: 'accept',
+                        accept: false
+                    })}></button>
                 </>
+            }
+            {
+                data.type === 'ringing' &&
+                <>
+                    <span>Calling {data.callee} ...</span>
+                    <button aria-roledescription="Hang up" className={styles.reject} title="Hang up" onClick={() => onEvent({
+                        type: 'hangUp'
+                    })}></button>
+                </>
+            }
+            {
+                data.type === 'videoCall' &&
+                <button aria-roledescription="Hang up" className={styles.reject} title="Hang up" onClick={() => onEvent({
+                    type: 'hangUp'
+                })}></button>
             }
         </div>
     )

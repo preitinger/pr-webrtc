@@ -3,3 +3,20 @@
     height: 500px;
     /* border: 1px solid black; */
 }
+.accept {
+    background-image: url('/accept-call-64x64.png');
+    background-color: transparent;
+    width: 64px;
+    height: 64px;
+    border: none;
+}
+.reject {
+    background-image: url('/call-missed-64x64.png');
+    background-color: transparent;
+    width: 64px;
+    height: 64px;
+    border: none;
+}
+.offer {
+    font-size: larger;
+}

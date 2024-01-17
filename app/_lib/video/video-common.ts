@@ -72,6 +72,16 @@ export type CheckAcceptResp = {
     type: 'rejected';
 }
 
+export interface HangUpReq {
+    type: 'hangUp';
+    caller: string;
+    callee: string;
+}
+
+export type HangUpResp = {
+    type: 'success';
+}
+
 /**
  * direction of the msg will be derived with help of the validatedUser also given to webRTCMsg() in video-server.ts
  */
