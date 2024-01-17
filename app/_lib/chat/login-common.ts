@@ -1,4 +1,5 @@
 export type LoginReq = {
+    type: 'login';
     user: string;
     passwd: string;
     chatId: string;

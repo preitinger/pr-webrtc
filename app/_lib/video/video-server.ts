@@ -3,7 +3,8 @@
 
 import clientPromise from "../mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
-import { AcceptCallReq, AcceptCallResp, CheckCallReq, CheckCallResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp } from "./video-common";
+import { checkToken } from "../user-management-server/userManagementServer";
+import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
 
 const dbName = 'video';
 
@@ -11,10 +12,8 @@ export interface Callee {
     _id: string;
     caller: string;
     accepted: boolean;
-    descriptionCaller: string;
-    descriptionCallee: string | null;
-    candidatesCaller: string[];
-    candidatesCallee: string[];
+    messagesForCallee: string[];
+    messagesForCaller: string[];
 }
 
 export async function offerCall(validatedUser: string, o: OfferCallReq): Promise<ApiResp<OfferCallResp>> {
@@ -28,28 +27,19 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
     const calleesCol = db.collection<Callee>('callees');
 
     try {
-        const updateRes = await calleesCol.updateOne({
+        await calleesCol.updateOne({
             _id: o.callee,
             caller: o.caller
         }, {
             $set: {
                 accepted: false,
-                descriptionCaller: JSON.stringify(o.description),
-                descriptionCallee: null,
-                candidatesCaller: o.candidates.map(o => JSON.stringify(o)),
-                candidatesCallee: []
+                messagesForCallee: [],
+                messagesForCaller: []
             }
         }, {
             upsert: true
         })
-        console.log('updateRes', updateRes);
 
-        // const insRes = await calleesCol.insertOne({
-        //     _id: o.callee,
-        //     caller: o.caller,
-        //     accepted: false
-        // })
-        // console.log('insRes', insRes);
         return {
             type: 'success'
         }
@@ -112,32 +102,37 @@ export async function acceptCall(validatedUser: string, o: AcceptCallReq): Promi
     const db = client.db(dbName);
     const calleesCol = db.collection<Callee>('callees');
 
-    const updateRes = await calleesCol.findOneAndUpdate({
+    // const updateRes = await calleesCol.findOneAndUpdate({
+    const updateRes = await calleesCol.updateOne({
         _id: o.callee,
         caller: o.caller
     }, {
         $set: {
             accepted: true,
-            descriptionCallee: JSON.stringify(o.description),
-            candidatesCallee: o.candidates.map(candidate => JSON.stringify(candidate))
         },
-    }, {
-        projection: {
-            descriptionCaller: 1,
-            candidatesCaller: 1
-        }
     });
 
-    if (updateRes == null) {
+    if (!updateRes.acknowledged) {
+        const msg = 'update for acceptCall not acknowledged?!'
+        console.error(msg);
+        return {
+            type: 'error',
+            error: msg
+        }
+    }
+
+    if (updateRes.matchedCount !== 1) {
         return {
             type: 'notFound'
         }
     }
 
+    if (updateRes.modifiedCount !== 1) {
+        console.warn('Callee.accepted was true before acceptCall()?!');
+    }
+
     return {
         type: 'success',
-        description: JSON.parse(updateRes.descriptionCaller),
-        candidates: updateRes.candidatesCaller.map(s => JSON.parse(s))
     }
 }
 
@@ -159,4 +154,137 @@ export async function rejectCall(validatedUser: string, req: RejectCallReq): Pro
     return ({
         type: 'success'
     });
+}
+
+export async function checkAccept(validatedUser: string, req: CheckAcceptReq): Promise<ApiResp<CheckAcceptResp>> {
+    if (validatedUser !== req.caller) {
+        return ({
+            type: 'error',
+            error: 'Authentication for checkAccept failed'
+        })
+    }
+
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const calleesCol = db.collection<Callee>('callees');
+
+    const res = await calleesCol.findOne({
+        _id: req.callee,
+        caller: req.caller
+    }, {
+        projection: {
+            accepted: 1
+        }
+    })
+
+    if (res == null) {
+        return {
+            type: 'rejected'
+        }
+    }
+    if (res.accepted) {
+        return {
+            type: 'accepted'
+        }
+    } else {
+        return {
+            type: 'ringing'
+        }
+    }
+}
+
+export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promise<ApiResp<WebRTCMsgResp>> {
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const calleesCol = db.collection<Callee>('callees');
+
+    if (validatedUser === req.caller) {
+        // sent from the caller to the callee
+        const res = await calleesCol.findOneAndUpdate({
+            _id: req.callee,
+            caller: req.caller
+        }, {
+            $push: {
+                messagesForCallee: { $each: req.messages }
+            },
+            $set: {
+                messagesForCaller: []
+            }
+        }, {
+            projection: {
+                messagesForCaller: 1
+            }
+        });
+        if (res == null) {
+            return {
+                type: 'closed'
+            }
+        }
+        // There is actually a gap here because the http request could fail somehow and then the messages are lost.
+        // But hey, it's just a video call ;-)
+        return {
+            type: 'success',
+            messages: res.messagesForCaller
+        }
+
+    } else if (validatedUser === req.callee) {
+        // sent from the callee to the caller
+        const res = await calleesCol.findOneAndUpdate({
+            _id: req.callee,
+            caller: req.caller
+        }, {
+            $push: {
+                messagesForCaller: { $each: req.messages }
+            },
+            $set: {
+                messagesForCallee: []
+            }
+        }, {
+            projection: {
+                messagesForCallee: 1
+            }
+        });
+        if (res == null) {
+            return {
+                type: 'closed'
+            }
+        }
+        // There is actually a gap here because the http request could fail somehow and then the messages are lost.
+        // But hey, it's just a video call ;-)
+        return {
+            type: 'success',
+            messages: res.messagesForCallee
+        }
+    } else {
+        // error
+        return {
+            type: 'error',
+            error: 'Illegal user/caller/callee'
+        }
+    }
+}
+
+
+export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | RejectCallReq | OfferCallReq | CheckAcceptReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | RejectCallResp | OfferCallResp | CheckAcceptResp | WebRTCMsgResp>> {
+    if (!checkToken(req.ownUser, req.sessionToken)) {
+        return {
+            type: 'error',
+            error: 'Authentication failed'
+        }
+    }
+    switch (req.req.type) {
+        case 'checkCall':
+            return checkCall(req.ownUser, req.req);
+        case 'acceptCall':
+            return acceptCall(req.ownUser, req.req);
+        case 'rejectCall':
+            return rejectCall(req.ownUser, req.req);
+        case 'offerCall':
+            return offerCall(req.ownUser, req.req);
+        case 'checkAccept':
+            return checkAccept(req.ownUser, req.req);
+        case 'webRTCMsg':
+            return webRTCMsg(req.ownUser, req.req);
+        // default: throw new Error(`Not yet implemented: ${req.req.type}`);
+    }
 }

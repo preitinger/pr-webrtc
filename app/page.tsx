@@ -7,15 +7,17 @@ import ModalDialog from '@/components/ModalDialog';
 import EscapableFlexComp from '@/components/EscapableFlexComp';
 import { LoginReq, LoginResp } from './_lib/chat/login-common';
 import { ChatEvent, ChatReq, ChatResp } from './_lib/chat/chat-common';
-import { apiFetchPost } from './_lib/user-management-client/apiRoutesClient';
+import { AccumulatedFetcher, ConnectionHandler, apiFetchPost } from './_lib/user-management-client/apiRoutesClient';
 import { ApiResp } from './_lib/user-management-client/user-management-common/apiRoutesCommon';
 import { LogoutReq, LogoutResp } from './_lib/chat/logout-common';
 import { userRegisterFetch } from './_lib/user-management-client/userManagementClient';
 import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
-import { VideoComp } from './_lib/video/video-client';
+// import { VideoComp } from './_lib/video/video-client';
 import { RTCRef, openPeerConnection } from './_lib/myWebRTC/myWebRTC-client';
 import { CheckCallReq, OfferCallReq, OfferCallResp, RejectCallReq } from "./_lib/video/video-common";
 import { TestReq as TestReq, TestResp as TestResp } from './api/tests/testOfferCall/types';
+import { VideoComp, VideoToolbarComp } from './_lib/video/video-client';
+import VideoManager, { ReceivedCall, VideoHandlers } from './_lib/video/VideoManager';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
@@ -23,6 +25,7 @@ const chatId = 'pr-webrtc';
 
 interface LoginState {
     ownUser: string | null;
+    sessionToken: string | null;
 }
 
 interface User {
@@ -68,7 +71,8 @@ function exampleLines() {
 
 export default function Home() {
     const [loginState, setLoginState] = useState<LoginState>({
-        ownUser: null
+        ownUser: null,
+        sessionToken: null
     })
 
     const [loginName, setLoginName] = useState<string>('');
@@ -106,6 +110,20 @@ export default function Home() {
     const rtcRef = useRef<RTCRef>({
         peerConnection: null
     })
+    const accumulatedFetcher = useRef<AccumulatedFetcher | null>(null);
+
+    useEffect(() => {
+        if (typeof (window) !== undefined) {
+            const connectionHandler: ConnectionHandler = (error: string) => {
+                pushErrorLine(error);
+                // requestStateRef.current = 'waiting on error';
+                setChatInputFrozen(true);
+                setConnectionError(true);
+                setConnectionErrorConfirmed(false);
+            }
+            accumulatedFetcher.current = new AccumulatedFetcher('/api/webRTC', connectionHandler);
+        }
+    }, [])
 
     function processChatLines(m: ChatEvent[], lastEventId: number | null) {
         // Voraussetzung: { m.length > 0 ==> lastEventId != null }
@@ -156,6 +174,13 @@ export default function Home() {
         })
     }
 
+    function pushHintLine(line: string) {
+        setChatLines(d => [...d, {
+            className: styles.hintLine,
+            text: line
+        }]);
+    }
+
     function pushErrorLine(line: string) {
         setChatLines(d => [...d, {
             className: styles.errorLine,
@@ -189,8 +214,8 @@ export default function Home() {
             alert('Please select a user in the list, first.')
             return;
         }
-        openPeerConnection(rtcRef.current);
-        setVideoCall(true);
+
+        videoManagerRef.current?.onCall(userList.users[userList.selected].name);
     }
 
     function onDlgCancel() {
@@ -220,14 +245,17 @@ export default function Home() {
         if (ownUserRef.current == null) throw new Error('own user null');
         if (sessionTokenRef.current == null) throw new Error('session token null');
         const req: ChatReq = {
+            type: 'chat',
             chatId: chatId,
             user: ownUserRef.current,
             token: sessionTokenRef.current,
             msg: lineToSendRef.current,
             lastEventId: lastEventIdRef.current,
         }
-        console.log('vor myFetchPost: req', req);
-        apiFetchPost<ChatReq, ChatResp>('/api/chat', req).then(resp => {
+        console.debug('vor myFetchPost: req', req);
+        if (accumulatedFetcher.current == null) throw new Error('accumulatedFetcher null');
+        accumulatedFetcher.current.push<ChatReq, ChatResp>(req).
+        /* apiFetchPost<ChatReq, ChatResp>('/api/chat', req). */then(resp => {
             if (resp.type === 'error') {
                 console.error('Error on server', resp.error);
                 pushErrorLine('Error on server: ' + resp.error);
@@ -237,10 +265,10 @@ export default function Home() {
                 setConnectionErrorConfirmed(false);
                 return;
             } else if (resp.type === 'success') {
-                console.log('chat resp', resp);
+                console.debug('chat resp', resp);
                 processChatLines(resp.events, resp.lastEventId);
                 lastEventIdRef.current = resp.lastEventId;
-                console.log('last eventId', lastEventIdRef.current);
+                console.debug('last eventId', lastEventIdRef.current);
 
                 switch (requestStateRef.current) {
                     case 'fetching':
@@ -257,13 +285,13 @@ export default function Home() {
                         requestStateRef.current = 'waiting for timeout';
                         timeout.current = setTimeout(onTimeout, timeoutMs);
                         setChatInputFrozen(false);
-                        console.log('unfrozen chat input');
+                        console.debug('unfrozen chat input');
                         break;
                     case 'logging in':
                         return;
                         break;
                     default:
-                        throw new Error('Unexpected state on fetch response' + requestStateRef.current);
+                        throw new Error('Unexpected state on fetch response: ' + requestStateRef.current);
                 }
             } else if (resp.type === 'authenticationFailed') {
                 alert('Die Session ist abgelaufen. Evtl. hast du dich inzwischen an anderer Stelle eingeloggt?');
@@ -295,54 +323,94 @@ export default function Home() {
             requestStateRef.current = 'sending';
             setChatInputFrozen(true);
         }
-        console.log('waehrend myFetchPost', requestStateRef.current);
+        console.debug('waehrend myFetchPost', requestStateRef.current);
     }
 
+    const videoManagerRef = useRef<VideoManager | null>(null);
+    const [receivedCall, setReceivedCall] = useState<ReceivedCall | null>(null);
+
     function onLogin() {
-        apiFetchPost<LoginReq, LoginResp>('/api/login', {
+        const fetcher = accumulatedFetcher.current;
+        if (fetcher == null) return;
+        const req: LoginReq = {
+            type: 'login',
             user: loginName,
             passwd: loginPasswd,
             chatId: chatId
-        }).then((loginRes: ApiResp<LoginResp>) => {
-            console.log('loginRes', loginRes);
-            if (loginRes.type === 'error') {
-                alert('Error on login: ' + loginRes.error);
-                return;
-            } else if (loginRes.type === 'authenticationFailed') {
-                alert('Wrong user name or password!');
-                return;
-            } else if (loginRes.type === 'success') {
-                setLoginState({
-                    ownUser: loginName
-                })
-                ownUserRef.current = loginName;
-                sessionTokenRef.current = loginRes.token;
-                eventIdForUsers.current = loginRes.eventIdForUsers;
 
-                setChatLines(d => [
-                    ...d,
+        }
+        // apiFetchPost<LoginReq, LoginResp>('/api/login', req)
+
+        fetcher.push<LoginReq, LoginResp>(req)
+            .then((loginRes: ApiResp<LoginResp>) => {
+                console.debug('loginRes', loginRes);
+                if (loginRes.type === 'error') {
+                    alert('Error on login: ' + loginRes.error);
+                    return;
+                } else if (loginRes.type === 'authenticationFailed') {
+                    alert('Wrong user name or password!');
+                    return;
+                } else if (loginRes.type === 'success') {
+                    setLoginState({
+                        ownUser: loginName,
+                        sessionToken: loginRes.token
+                    })
+                    ownUserRef.current = loginName;
+                    sessionTokenRef.current = loginRes.token;
+                    eventIdForUsers.current = loginRes.eventIdForUsers;
+
+                    setChatLines(d => [
+                        ...d,
+                        {
+                            className: styles.hintLine,
+                            text: `Welcome, ${loginName}!`
+                        }
+                    ])
+                    setScrollDown(true);
+                    console.debug('vor executeRequest', requestStateRef.current);
+                    executeRequest();
+                    console.debug('nach executeRequest', requestStateRef.current);
+                    setChatInputFrozen(false);
                     {
-                        className: styles.hintLine,
-                        text: `Welcome, ${loginName}!`
-                    }
-                ])
-                setScrollDown(true);
-                console.log('vor executeRequest', requestStateRef.current);
-                executeRequest();
-                console.log('nach executeRequest', requestStateRef.current);
-                setChatInputFrozen(false);
-            }
+                        const handlers: VideoHandlers = {
+                            onReceivedCall: (receivedCall1: ReceivedCall) => {
+                                setReceivedCall(receivedCall1);
+                            },
+                            onVideoCall: (caller, callee) => {
+                                setVideoCall(true);
+                                alert('Not yet implemented: onVideoCall')
+                            },
+                            onLocalStream: (s) => {
+                                setLocalMediaStream(s);
+                            },
+                            onRemoteStream: (s) => {
+                                setRemoteMediaStream(s);
+                            },
+                            onHint: (hint: string) => {
+                                pushHintLine(hint);
+                            },
+                            onError: (error: string) => {
+                                pushErrorLine(error);
+                            }
+                        };
 
-            setUserList({
-                users: loginRes.users.map(userName => ({
-                    name: userName
-                })),
-                selected: -1
+                        if (videoManagerRef.current != null) {
+                            videoManagerRef.current.close();
+                        }
+                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, 2000, fetcher, handlers);
+                    }
+                }
+
+                setUserList({
+                    users: loginRes.users.map(userName => ({
+                        name: userName
+                    })),
+                    selected: -1
+                })
+            }).catch(reason => {
+                console.error(reason);
+                alert('Server problem');
             })
-        }).catch(reason => {
-            console.error(reason);
-            alert('Server problem');
-        })
     }
 
     function onRegister() {
@@ -409,7 +477,7 @@ export default function Home() {
                 throw new Error('illegal state in onChatSend' + requestStateRef.current);
         }
 
-        console.log('state nach onChatSend', requestStateRef.current);
+        console.debug('state nach onChatSend', requestStateRef.current);
 
         // myFetchPost<ChatReq, ChatResp>('/api/chat', {
         //     chatId: 'pr-webrtc',
@@ -441,9 +509,9 @@ export default function Home() {
     function onScroll() {
         const div = chatLinesRef.current;
         if (div == null) return;
-        console.log('scrollTop', div.scrollTop);
-        console.log('offsetHeight', div.offsetHeight);
-        console.log('div.scrollHeight', div.scrollHeight);
+        console.debug('scrollTop', div.scrollTop);
+        console.debug('offsetHeight', div.offsetHeight);
+        console.debug('div.scrollHeight', div.scrollHeight);
         if (div.scrollTop + div.offsetHeight + 10 > div.scrollHeight) {
             setScrollDown(true);
         } else {
@@ -455,7 +523,8 @@ export default function Home() {
         ownUserRef.current = null;
         sessionTokenRef.current = null;
         setLoginState({
-            ownUser: null
+            ownUser: null,
+            sessionToken: null,
         })
         requestStateRef.current = 'logging in';
         if (timeout.current != null) {
@@ -466,31 +535,43 @@ export default function Home() {
             users: [],
             selected: -1
         });
+        setVideoCall(false);
+        setLocalMediaStream(null);
+        setRemoteMediaStream(null);
 
     }
 
     function onLogout() {
         if (ownUserRef.current == null) return;
         if (sessionTokenRef.current == null) return;
-        apiFetchPost<LogoutReq, LogoutResp>('/api/logout', {
+        if (accumulatedFetcher.current == null) return;
+        const req: LogoutReq = {
+            type: 'logout',
             user: ownUserRef.current,
             token: sessionTokenRef.current,
             chatId: chatId
-        }).then((logOutRes: ApiResp<LogoutResp>) => {
-            console.log('logoutResp', logOutRes);
-            afterLogoutOrLostSession();
-        }).catch(reason => {
-            console.log('reason', reason);
-        })
+        }
+        // apiFetchPost<LogoutReq, LogoutResp>('/api/logout', req)
+        accumulatedFetcher.current.push<LogoutReq, LogoutResp>(req)
+            .then((logOutRes: ApiResp<LogoutResp>) => {
+                console.debug('logoutResp', logOutRes);
+                afterLogoutOrLostSession();
+            }).catch(reason => {
+                console.log('reason', reason);
+            })
     }
 
     function onRetryConnect() {
         if (requestStateRef.current === 'waiting on error') {
-            console.log('vor executeRequest', requestStateRef.current);
+            console.debug('vor executeRequest', requestStateRef.current);
             executeRequest();
-            setConnectionError(false);
-            setChatInputFrozen(false);
         }
+
+        if (accumulatedFetcher.current != null) {
+            accumulatedFetcher.current.retryAfterError();
+        }
+        setConnectionError(false);
+        setChatInputFrozen(false);
     }
 
     // video effect:
@@ -563,8 +644,8 @@ export default function Home() {
                                     type: 'offerCall',
                                     caller: testCaller,
                                     callee: testCallee,
-                                    description: {bla: 'bla'},
-                                    candidates: [{'candidate-of-caller': 'bla'}]
+                                    description: { bla: 'bla' },
+                                    candidates: [{ 'candidate-of-caller': 'bla' }]
                                 }
                             }
                             const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
@@ -602,8 +683,8 @@ export default function Home() {
                                     type: 'acceptCall',
                                     caller: testCaller,
                                     callee: testCallee,
-                                    description: {bla: 'blubb'},
-                                    candidates: [{'test-candidate': 1}, {'test-candidate': 2}]
+                                    description: { bla: 'blubb' },
+                                    candidates: [{ 'test-candidate': 1 }, { 'test-candidate': 2 }]
                                 }
                             }
                             const resp = await apiFetchPost<TestReq, TestResp>('/api/tests/testOfferCall', req);
@@ -647,6 +728,10 @@ export default function Home() {
                         </>
                     }
                     <div>
+                        <VideoToolbarComp receivedCall={receivedCall} onAccept={(accept) => {
+                            setReceivedCall(null);
+                            videoManagerRef.current?.onAccept(accept);
+                        }} />
                         <VideoComp key='localMedia' mediaStream={localMediaStream} />
                         <VideoComp key='remoteMedia' mediaStream={remoteMediaStream} />
                     </div>

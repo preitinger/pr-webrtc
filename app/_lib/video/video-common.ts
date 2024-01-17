@@ -8,8 +8,6 @@ export interface OfferCallReq {
     type: 'offerCall';
     caller: string;
     callee: string;
-    description: any;
-    candidates: any[];
 }
 
 export type OfferCallResp = {
@@ -38,14 +36,10 @@ export interface AcceptCallReq {
     type: 'acceptCall';
     caller: string;
     callee: string;
-    description: any;
-    candidates: any[];
 }
 
 export type AcceptCallResp = {
     type: 'success';
-    description: any;
-    candidates: any[];
 } | {
     type: 'authFailed';
 } | {
@@ -62,4 +56,42 @@ export type RejectCallResp = {
     type: 'success'; // also if not found
 } | {
     type: 'authFailed';
+}
+
+export interface CheckAcceptReq {
+    type: 'checkAccept';
+    caller: string;
+    callee: string;
+}
+
+export type CheckAcceptResp = {
+    type: 'ringing';
+} | {
+    type: 'accepted';
+} | {
+    type: 'rejected';
+}
+
+/**
+ * direction of the msg will be derived with help of the validatedUser also given to webRTCMsg() in video-server.ts
+ */
+export interface WebRTCMsgReq {
+    type: 'webRTCMsg';
+    caller: string;
+    callee: string;
+    messages: string[];
+}
+
+export type WebRTCMsgResp = {
+    type: 'success';
+    messages: string[];
+} | {
+    type: 'closed';
+}
+
+export type AuthenticatedVideoReq<Req> = {
+    type: 'authenticatedVideoReq';
+    ownUser: string;
+    sessionToken: string;
+    req: Req;
 }

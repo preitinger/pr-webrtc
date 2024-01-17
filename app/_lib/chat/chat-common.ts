@@ -3,6 +3,7 @@
  * request to optionally add a message and fetch all messages or the messages with an id greater than lastMsgId.
  */
 export type ChatReq = {
+    type: 'chat';
     chatId: string;
     user: string;
     token: string;
