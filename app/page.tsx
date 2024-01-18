@@ -74,6 +74,7 @@ export default function Home() {
         ownUser: null,
         sessionToken: null
     })
+    const [serverHint, setServerHint] = useState<boolean>(false);
 
     const [loginName, setLoginName] = useState<string>('');
     const [loginPasswd, setLoginPasswd] = useState<string>('');
@@ -341,6 +342,7 @@ export default function Home() {
         }
         // apiFetchPost<LoginReq, LoginResp>('/api/login', req)
 
+        setServerHint(true);
         fetcher.push<LoginReq, LoginResp>(req)
             .then((loginRes: ApiResp<LoginResp>) => {
                 console.debug('loginRes', loginRes);
@@ -409,10 +411,13 @@ export default function Home() {
             }).catch(reason => {
                 console.error(reason);
                 alert('Server problem');
+            }).finally(() => {
+                setServerHint(false);
             })
     }
 
     function onRegister() {
+        setServerHint(true);
         userRegisterFetch({
             user: loginName,
             passwd: loginPasswd
@@ -428,6 +433,8 @@ export default function Home() {
                     alert('Registration successful! You can now login with this user and password.')
                     break;
             }
+        }).finally(() => {
+            setServerHint(false);
         })
     }
 
@@ -713,7 +720,13 @@ export default function Home() {
                 </div>
             </main>
             {
-                loginState.ownUser == null &&
+                serverHint &&
+                <ModalDialog key='loginDlg'>
+                    <p>Concacting server ...</p>
+                </ModalDialog>
+            }
+            {
+                loginState.ownUser == null && !serverHint &&
                 <ModalDialog key='loginDlg'>
                     <EscapableFlexComp onCancel={onDlgCancel}>
                         <label>User</label>
