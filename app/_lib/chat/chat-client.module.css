@@ -1,6 +1,7 @@
 .chatLinesBorder {
-    margin: 1em;
-    border:1px solid gray;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    border: 1px solid gray;
     border-radius: 1em;
     /* max-height: 80vh; */
     /* overflow: hidden; */
@@ -12,12 +13,14 @@
     padding-bottom: var(--chat-lines-border-vert);
     height: auto;
 }
+
 .chatLinesBorder:focus-within {
     border-radius: 1em;
     outline: 1px dashed black;
     outline-offset: 1px;
 
 }
+
 .chatLines {
     padding: 1em;
     height: calc(70vh - 7em);
@@ -29,28 +32,39 @@
 }
 
 .chatLines:focus {
-    outline: none; /* because the parent .chatLinesBorder is outlined */
+    outline: none;
+    /* because the parent .chatLinesBorder is outlined */
+}
+
+@media (min-width: 1000px) {
+    .chatLinesBorder {
+        margin: 1em;
+    }
+    .userListOuter {
+        width: 30ex;
+    }
 }
 
 .noUsers {
-    font-style:italic;
+    font-style: italic;
 }
+
 .userListOuter {
     overflow: hidden;
     border: 1px solid black;
-    border-radius:1em;
+    border-radius: 1em;
     cursor: pointer;
     margin-left: 1em;
     margin-right: 1em;
     margin-top: 0.8em;
     margin-bottom: 0.8em;
     padding: 0;
-    width: 30ex;
 }
+
 .userList {
-    list-style-type:none;
+    list-style-type: none;
     background-color: bisque;
-    color:black;
+    color: black;
     max-height: 50vh;
     overflow-y: scroll;
     padding-left: 0;
@@ -81,8 +95,9 @@
 .userListItemOuter:first-child {
     margin-top: 1em;
 }
+
 .userListItemOuter:last-child {
-    margin-bottom:1em;
+    margin-bottom: 1em;
 }
 
 .userListItemOuter:nth-child(odd) {

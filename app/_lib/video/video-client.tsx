@@ -14,15 +14,12 @@ export const VideoComp = (props: VideoProps) => {
     const ref = useRef<HTMLVideoElement | null>(null);
 
     useEffect(() => {
-        console.log('stream effect');
         if (ref.current == null) return;
-        console.log('updating srcObject to ', props.mediaStream);
         ref.current.srcObject = props.mediaStream;
 
         if (props.mediaStream == null) {
             ref.current.removeAttribute('src');
             ref.current.removeAttribute('srcObject');
-            console.log('removed media attributes');
         }
 
     }, [props.mediaStream])
@@ -32,8 +29,9 @@ export const VideoComp = (props: VideoProps) => {
     )
 }
 
-
-export type ToolbarData = {
+export type ToolbarDataPart = {
+    type: 'idle';
+} | {
     type: 'receivedCall';
     receivedCall: ReceivedCall
 } | {
@@ -44,11 +42,18 @@ export type ToolbarData = {
     caller: string;
 }
 
+export type ToolbarData = {
+    ringOnCall: boolean;
+} & ToolbarDataPart
+
 export type VideoToolbarEvent = {
     type: 'accept';
     accept: boolean;
 } | {
     type: 'hangUp';
+} | {
+    type: 'ringOnCall';
+    checked: boolean
 }
 
 export interface VideoToolbarProps {
@@ -59,9 +64,27 @@ export interface VideoToolbarProps {
 
 export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
 
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        if (data.type === 'receivedCall' && data.ringOnCall) {
+            audioRef.current?.play();
+        }
+    }, [data.type, data.ringOnCall])
+
 
     return (
-        <div>
+        <div className={styles.toolbar}>
+            {
+                <div>
+                    <label>Ring on Call
+                        <input type='checkbox' checked={data.ringOnCall} onChange={(e) => onEvent({
+                            type: 'ringOnCall',
+                            checked: e.target.checked
+                        })} />
+                    </label>
+                </div>
+            }
             {
                 data.type === 'receivedCall' && data.receivedCall != null &&
                 <>
@@ -79,7 +102,7 @@ export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
             {
                 data.type === 'ringing' &&
                 <>
-                    <span>Calling {data.callee} ...</span>
+                    <p>Calling {data.callee} ...</p>
                     <button aria-roledescription="Hang up" className={styles.reject} title="Hang up" onClick={() => onEvent({
                         type: 'hangUp'
                     })}></button>
@@ -91,6 +114,11 @@ export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
                     type: 'hangUp'
                 })}></button>
             }
+            <audio ref={audioRef} preload="auto" controls={false} src="/ring.mp3" typeof="audio/mpeg" onEnded={() => {
+                if (data.type === 'receivedCall' && data.ringOnCall) {
+                    audioRef.current?.play();
+                }
+            }} />
         </div>
     )
 }

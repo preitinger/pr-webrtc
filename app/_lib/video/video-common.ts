@@ -46,12 +46,19 @@ export type AcceptCallResp = {
     type: 'notFound' // if call has meanwhile been removed after the caller had hang up
 }
 
+/**
+ * @deprecated and replaced by HangUpReq
+ */
 export interface RejectCallReq {
     type: 'rejectCall';
     caller: string;
     callee: string;
 }
 
+
+/**
+ * @deprecated and replaced by HangUpResp
+ */
 export type RejectCallResp = {
     type: 'success'; // also if not found
 } | {

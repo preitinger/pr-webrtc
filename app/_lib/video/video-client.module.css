@@ -1,6 +1,17 @@
+.toolbar {
+    margin-top: 4em;
+}
 .video {
-    width: 500px;
-    height: 500px;
+    @media(min-width: 1000px) {
+        width: 500px;
+        height: 500px;
+    } 
+    @media(max-width: 999px) {
+        margin: 0;
+        width: 100%;
+        height: auto;
+        padding: 0;
+    }
     /* border: 1px solid black; */
 }
 .accept {

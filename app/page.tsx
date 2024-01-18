@@ -205,7 +205,7 @@ export default function Home() {
     function onUserKey(e: KeyboardEvent<HTMLElement>) {
         // TODO call user on enter?
         // But if user is called on enter, current behavior to toggle selection on enter (as well as on space) must be changed in chat-client.tsx
-        console.log('onUserKey key', e.key);
+        // console.log('onUserKey key', e.key);
     }
 
 
@@ -396,7 +396,7 @@ export default function Home() {
                         if (videoManagerRef.current != null) {
                             videoManagerRef.current.close();
                         }
-                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, 10000, fetcher, handlers);
+                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, timeoutMs, fetcher, handlers);
                     }
                 }
 
@@ -477,26 +477,6 @@ export default function Home() {
         }
 
         console.debug('state nach onChatSend', requestStateRef.current);
-
-        // myFetchPost<ChatReq, ChatResp>('/api/chat', {
-        //     chatId: 'pr-webrtc',
-        //     user: ownUserRef.current,
-        //     passwd: '',
-        //     msg: chatInput,
-        //     lastMsgId: lastMsgIdRef.current
-        // }).then((resp: MyResp<ChatResp>) => {
-        //     console.log('onChatSend: response', resp);
-        //     if (resp.type === 'success') {
-        //         pushChatLines(resp.messages);
-        //         lastMsgIdRef.current = resp.lastMsgId;
-        //     } else {
-        //         console.error('Unexpected server error', resp.error);
-        //         alert('Unexpected server error: ' + resp.error)
-        //     }
-        // }).catch(reason => {
-        //     console.error('Unexpected server exception', reason);
-        //     alert('Unexpected server error: ' + JSON.stringify(reason));
-        // });
     }
 
     const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
@@ -559,7 +539,7 @@ export default function Home() {
                 console.debug('logoutResp', logOutRes);
                 afterLogoutOrLostSession();
             }).catch(reason => {
-                console.log('reason', reason);
+                console.error('reason', reason);
             })
     }
 
@@ -575,20 +555,6 @@ export default function Home() {
         setConnectionError(false);
         setChatInputFrozen(false);
     }
-
-    // video effect:
-    useEffect(() => {
-        // const mediaConstraints = {
-        //     audio: true,
-        //     video: true
-        // }
-
-        // navigator.mediaDevices.getUserMedia(mediaConstraints).then(mediaStream => {
-        //     console.log('before setLocalMediaStream');
-        //     setLocalMediaStream(mediaStream);
-        // })
-
-    }, [])
 
     // TODO remove onTestMedia:
     function onTestMedia() {
@@ -639,7 +605,7 @@ export default function Home() {
                     }
                 </div>
                 <div className={styles.right}>
-                    <div>
+                    {/* <div>
                         <h1>Tests</h1>
                         <p>Empty string interpreted as bool is {'' ? 'true' : 'false'}</p>
                         <p>String {"'.'"} is interpreted as bool {'.' ? 'true' : 'false'}</p>
@@ -724,7 +690,7 @@ export default function Home() {
                             alert('resp: ' + JSON.stringify(resp));
 
                         }}>rejectCall</button>
-                    </div>
+                    </div> */}
                     {
                         !videoCall &&
                         <>

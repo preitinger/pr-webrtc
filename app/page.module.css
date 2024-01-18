@@ -1,40 +1,58 @@
-.main {
-    position: relative;
-    padding: 2em;
-    height: 90vh;
-}
 .header {
     margin-bottom: 3em;
     /* height: 4em; */
 }
 
-.left {
-    position: absolute;
-    left: 0;
-    top:0;
-    bottom:0;
-    width: 40ex;
+@media (min-width: 1000px) {
+    .main {
+        position: relative;
+        padding: 2em;
+        height: 90vh;
+    }
+
+    .left {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 40ex;
+    }
+
+    .right {
+        position: absolute;
+        left: 40ex;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        /* border:1px solid red; */
+        display: flex;
+        flex-direction: column;
+    }
 }
-.right {
-    position: absolute;
-    left: 40ex;
-    right: 0;
-    top:0;
-    bottom:0;
-    /* border:1px solid red; */
-    display: flex;
-    flex-direction: column;
+
+@media (max-width: 999px) {
+    .main {
+        padding: 0;
+        margin: 0;
+    }
+    .right {
+        display: flex;
+        flex-direction: column;
+    }
 }
+
 
 .call {
     margin-top: 0.8em;
     border-radius: 1em;
     padding: 1em;
 }
+
 .hintLine {
     color: darkgreen;
     font-size: smaller;
 }
+
 .errorLine {
     color: darkred;
 }

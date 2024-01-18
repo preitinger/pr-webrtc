@@ -1,5 +1,5 @@
 import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
-import { ToolbarData, VideoToolbarEvent } from "./video-client";
+import { ToolbarData, ToolbarDataPart, VideoToolbarEvent } from "./video-client";
 import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
 
 export interface ReceivedCall {
@@ -18,7 +18,7 @@ const config = {
 };
 
 export interface VideoHandlers {
-    onToolbarData: (data: ToolbarData | null) => void;
+    onToolbarData: (data: ToolbarData) => void;
     // onReceivedCall: (receivedCall: ReceivedCall) => void;
     onVideoCall: (videoCall: boolean) => void;
     onLocalStream: (stream: MediaStream | null) => void;
@@ -50,20 +50,15 @@ export default class VideoManager {
 
     close() {
         if (this.state === 'error') return;
-        if (this.timeout != null) {
-            console.log('clearTimeout in close()')
-            clearTimeout(this.timeout);
-            this.timeout = null;
-        }
+        this.clearMyTimeout();
 
         this.state = 'closed';
         this.handlers.onLocalStream(null);
         this.handlers.onRemoteStream(null);
-        this.handlers.onToolbarData(null);
+        this.fireUpdatedToolbarData({ type: 'idle' });
     }
 
     onVideoToolbarEvent(e: VideoToolbarEvent) {
-        console.log('onVideoToolbarEvent', this.state, e);
         switch (e.type) {
             case 'accept':
                 this.onAccept(e.accept);
@@ -79,17 +74,27 @@ export default class VideoManager {
                     default:
                         break;
                 }
+                break;
+            case 'ringOnCall':
+                this.ringOnCall = e.checked;
+                this.handlers.onToolbarData(this.toolbarData = {
+                    ...this.toolbarData,
+                    ringOnCall: this.ringOnCall
+                });
+                break;
         }
     }
 
-    private closeVideoCall() {
+    private clearMyTimeout() {
         if (this.timeout != null) {
-            console.log('clearTimeout in closeVideoCall');
             clearTimeout(this.timeout);
             this.timeout = null;
         }
-        this.handlers.onToolbarData(null);
 
+    }
+
+    private closeVideoCall() {
+        this.clearMyTimeout();
 
         const pc = this.peerConnection;
         if (pc != null) {
@@ -125,31 +130,39 @@ export default class VideoManager {
         })
         this.handlers.onLocalStream(null);
         this.handlers.onRemoteStream(null);
-        this.handlers.onToolbarData(null);
+        this.fireUpdatedToolbarData({ type: 'idle' });
         this.handlers.onVideoCall(false);
-        console.log('closed video call');
         this.state = 'checkingCall';
         this.sendCheckCall();
 
     }
 
+    private updateToolbarData(part: ToolbarDataPart): ToolbarData {
+        return (this.toolbarData = {
+            ...part,
+            ringOnCall: this.ringOnCall
+        })
+    }
+
+    private fireUpdatedToolbarData(part: ToolbarDataPart): void {
+        this.handlers.onToolbarData(this.updateToolbarData(part));
+    }
+
     private onAccept(accept: boolean) {
-        console.log('onAccept', this.state, accept);
         if (this.state !== 'answeringCall') return;
         if (this.receivedCall == null) throw new Error('receivedCall null?!');
 
         if (accept) {
             this.state = 'sendingAccept';
-            this.handlers.onToolbarData({
+            this.fireUpdatedToolbarData({
                 type: 'videoCall',
                 caller: this.caller ?? ''
-            })
+            });
             this.pushReq<AcceptCallReq, AcceptCallResp>({
                 type: 'acceptCall',
                 caller: this.receivedCall.caller,
                 callee: this.ownUser
             }).then(async resp => {
-                console.log('AcceptCallResp', this.state, resp);
                 if (this.state !== 'sendingAccept') return;
 
                 switch (resp.type) {
@@ -163,7 +176,7 @@ export default class VideoManager {
                         break;
                     case 'notFound':
                         this.handlers.onHint(`${this.receivedCall?.caller} has hung up.`);
-                        this.handlers.onToolbarData(null);
+                        this.fireUpdatedToolbarData({ type: 'idle' });
                         this.state = 'checkingCall';
                         this.sendCheckCall();
                         break;
@@ -179,33 +192,13 @@ export default class VideoManager {
 
         } else {
             this.state = 'sendingReject';
-            this.handlers.onToolbarData(null);
-            // this.pushReq<RejectCallReq, RejectCallResp>({
-            //     type: 'rejectCall',
-            //     caller: this.receivedCall.caller,
-            //     callee: this.ownUser
-            // }).then(async resp => {
-            //     console.log('RejectCallResp', this.state, resp);
-            //     if (this.state !== 'sendingReject') return;
-
-            //     switch (resp.type) {
-            //         case 'authFailed': throw new Error("authFailed in rejectCall");
-            //         case 'error':
-            //             this.handlers.onError(resp.error);
-            //             this.state = 'error';
-            //             break;
-            //         case 'success':
-            //             this.state = 'checkingCall';
-            //             this.sendCheckCall();
-            //             break;
-            //     }
-            // })
+            this.fireUpdatedToolbarData({ type: 'idle' });
+            // Earlier deprecated RejectCallReq
             this.pushReq<HangUpReq, HangUpResp>({
                 type: 'hangUp',
                 caller: this.receivedCall.caller,
                 callee: this.ownUser
             }).then(async resp => {
-                console.log('RejectCallResp', this.state, resp);
                 if (this.state !== 'sendingReject') return;
 
                 switch (resp.type) {
@@ -234,7 +227,6 @@ export default class VideoManager {
             this.makingOffer = false;
             this.ignoreOffer = false;
             pc.onnegotiationneeded = async (e) => {
-                console.log('onnegotiationneeded', this.state);
                 if (this.state !== 'videoCall') return;
 
                 try {
@@ -258,9 +250,7 @@ export default class VideoManager {
                 };
             };
             pc.onicecandidate = ({ candidate }) => {
-                console.log('onicecandidate', this.state, candidate)
                 if (this.state !== 'videoCall') return;
-                console.log('sending candidate', candidate)
                 this.sendWebRTCMsg([{
                     type: 'candidate',
                     candidate: candidate
@@ -291,12 +281,12 @@ export default class VideoManager {
         this.handlers.onVideoCall(true);
         this.handlers.onToolbarData({
             type: 'videoCall',
-            caller: this.caller
+            caller: this.caller,
+            ringOnCall: this.toolbarData.ringOnCall
         })
     }
 
     onCall(callee: string) {
-        console.log('onCall', this.state, callee);
         if (this.state === 'error') return;
         if (this.state !== 'checkingCall') {
             this.handlers.onHint('Already busy with a call');
@@ -306,16 +296,13 @@ export default class VideoManager {
             this.handlers.onHint("Please don't call yourself.");
             return;
         }
-        if (this.timeout != null) {
-            console.log('clearTimeout in onCall');
-            clearTimeout(this.timeout);
-            this.timeout = null;
-        }
+
+        this.clearMyTimeout();
 
         this.state = 'sendingOffer';
         this.caller = this.ownUser;
         this.callee = callee;
-        this.handlers.onToolbarData({
+        this.fireUpdatedToolbarData({
             type: 'ringing',
             callee: this.callee
         });
@@ -325,7 +312,6 @@ export default class VideoManager {
             callee: this.callee
         }
         this.pushReq<OfferCallReq, OfferCallResp>(req).then(resp => {
-            console.log('OfferCallResp', this.state, resp);
             if (this.state !== 'sendingOffer') return;
             switch (resp.type) {
                 case 'authFailed':
@@ -334,7 +320,7 @@ export default class VideoManager {
                     break;
                 case 'busy':
                     this.handlers.onHint(`${this.callee} is busy.`)
-                    this.handlers.onToolbarData(null);
+                    this.fireUpdatedToolbarData({ type: 'idle' });
                     this.state = 'checkingCall';
                     this.sendCheckCall();
                     break;
@@ -351,17 +337,11 @@ export default class VideoManager {
     }
 
     private sendWebRTCMsg(msg: any[]) {
-        console.log('sendWebRTCMsg', this.state, msg);
         if (this.state != 'videoCall') return;
         if (this.caller == null || this.callee == null) throw new Error('caller or callee null in sendWebRTCMsg?!');
 
-        if (this.timeout != null) {
-            console.log('sendWebRTCMsg: clearTimeout before pushReq')
-            clearTimeout(this.timeout);
-            this.timeout = null;
-        }
+        this.clearMyTimeout();
 
-        console.log('sendWebRTCMsg: before pushReq')
         this.pushReq<WebRTCMsgReq, WebRTCMsgResp>(
             {
                 type: 'webRTCMsg',
@@ -370,7 +350,6 @@ export default class VideoManager {
                 messages: msg.map(o => JSON.stringify(o))
             }
         ).then(async resp => {
-            console.log('sendWebRTCMsg: WebRTCMsgResp', this.state, resp);
             if (this.state !== 'videoCall') return;
             if (this.caller == null) throw new Error('caller null after WebRTCMsg?!');
             if (this.callee == null) throw new Error('callee null after WebRTCMsg?!');
@@ -392,14 +371,8 @@ export default class VideoManager {
                         if (this.state !== 'videoCall') return;
                     }
 
-                    if (this.timeout != null) {
-                        console.log('sendWebRTCMsg: clearTimeout at success response')
-                        clearTimeout(this.timeout);
-                        this.timeout = null;
-                    }
-                    console.log('sendWebRTCMsg: before setTimeout');
+                    this.clearMyTimeout();
                     this.timeout = setTimeout(() => {
-                        console.log('sendWebRTCMsg: running timeout');
                         this.sendWebRTCMsg([]);
                     }, this.repeatMs)
                     break;
@@ -416,36 +389,27 @@ export default class VideoManager {
 
     private async handleWebRTCMsg(data: any, polite: boolean) {
         const { description, candidate } = data;
-        console.log('handleWebRTCMsg: data=', data, 'state=', this.state);
         const pc = this.peerConnection;
         if (pc == null) return; // possible because asynchronous
         try {
             if (description) {
-                console.log('handling description', description);
                 const offerCollision =
                     description.type === "offer" &&
                     (this.makingOffer || pc.signalingState !== "stable");
-                console.log('offerCollision', offerCollision);
 
                 this.ignoreOffer = !polite && offerCollision;
                 if (this.ignoreOffer) {
-                    console.log('ignoring offer');
                     return;
                 }
 
-                console.log('before setRemoteDescription');
                 await pc.setRemoteDescription(description);
-                console.log('after setRemoteDescription');
                 if (this.state !== 'videoCall') return;
                 if (description.type === "offer") {
-                    console.log('handling offer');
                     await pc.setLocalDescription();
-                    console.log('local description set for offer');
                     if (this.state !== 'videoCall') return;
                     this.sendWebRTCMsg([{ description: pc.localDescription }])
                 }
             } else if (candidate) {
-                console.log('handling candidate', candidate);
                 try {
                     if (pc.signalingState !== 'closed') {
                         await pc.addIceCandidate(candidate);
@@ -466,9 +430,7 @@ export default class VideoManager {
             type: 'checkCall',
             callee: this.ownUser
         };
-        console.log('sendCheckCall', req);
         this.pushReq<CheckCallReq, CheckCallResp>(req).then(resp => {
-            console.log('CheckCallResp', this.state, resp);
             if (this.state !== 'checkingCall') return;
 
             switch (resp.type) {
@@ -477,6 +439,7 @@ export default class VideoManager {
                     this.state = 'error';
                     break;
                 case 'noNewOffer':
+                    this.clearMyTimeout();
                     this.timeout = setTimeout(() => {
                         if (this.state !== 'checkingCall') {
                             console.warn('return before sendCheckCall')
@@ -484,27 +447,45 @@ export default class VideoManager {
                         }
                         this.sendCheckCall();
                     }, this.repeatMs);
-                    console.log('timeout set on noNewOffer');
                     break;
                 case 'error':
                     this.handlers.onError(resp.error);
                     this.state = 'error';
                     break;
                 case 'newOffer':
+                    if (resp.caller === this.ownUser) {
+                        // was a dummy entry just existing to prevent a call to the own user while he was calling sb before loging out
+                        // so just remove this callee entry by sending a hangUp
+                        this.pushReq<HangUpReq, HangUpResp>({
+                            type: 'hangUp',
+                            caller: this.ownUser,
+                            callee: this.ownUser
+                        }).then(resp => {
+                            console.log('resp of hangUp on dummy offer', this.state, resp);
+                            if (this.state !== 'checkingCall') return;
+                            this.clearMyTimeout();
+                            this.timeout = setTimeout(() => {
+                                if (this.state !== 'checkingCall') {
+                                    console.warn('return before sendCheckCall')
+                                    return;
+                                }
+                                this.sendCheckCall();
+                            }, this.repeatMs);
+                        });
+                        return;
+                    }
                     this.receivedCall = {
                         caller: resp.caller
                     };
                     this.state = 'answeringCall';
-                    this.handlers.onToolbarData({
+                    this.fireUpdatedToolbarData({
                         type: 'receivedCall',
                         receivedCall: this.receivedCall
                     })
                     break;
             }
-            console.log('new state after CheckCallResp', this.state);
 
         }).catch(reason => {
-            console.log('Exception after checkCall', this.state, reason);
             if (this.state !== 'checkingCall') return;
             if (reason instanceof Error) {
                 this.handlers.onError(`Unknown server eror(${reason.name}): ${reason.message}`);
@@ -526,11 +507,11 @@ export default class VideoManager {
             callee: this.callee
         }
         this.pushReq<CheckAcceptReq, CheckAcceptResp>(req).then(resp => {
-            console.log('CheckAcceptResp', this.state, resp);
             if (this.state !== 'checkingAccept') return;
 
             switch (resp.type) {
                 case 'ringing':
+                    this.clearMyTimeout();
                     this.timeout = setTimeout(() => {
                         this.sendCheckAccept();
                     }, this.repeatMs);
@@ -540,7 +521,7 @@ export default class VideoManager {
                     break;
                 case 'rejected':
                     this.handlers.onHint(`${this.callee} rejected the call.`);
-                    this.handlers.onToolbarData(null);
+                    this.fireUpdatedToolbarData({ type: 'idle' });
                     this.state = 'checkingCall';
                     this.sendCheckCall();
                     break;
@@ -576,5 +557,6 @@ export default class VideoManager {
     private handlers: VideoHandlers;
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
-
+    private ringOnCall: boolean = false;
+    private toolbarData: ToolbarData = { type: 'idle', ringOnCall: this.ringOnCall };
 }

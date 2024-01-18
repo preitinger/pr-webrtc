@@ -1,6 +1,3 @@
-// TODO sth like this when callee accepts a call:
-//     db.collection('callers').updateOne({_id: "User 1", callees: {$elemMatch: {callee: "User 2"}}}, { $set: { "callees.$.status": "accepted"}})
-
 import clientPromise from "../mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
 import { checkToken } from "../user-management-server/userManagementServer";
@@ -183,7 +180,6 @@ export async function rejectCall(validatedUser: string, req: RejectCallReq): Pro
         _id: req.callee,
         caller: req.caller
     })
-    console.log('delete res', res);
     return ({
         type: 'success'
     });
@@ -234,7 +230,6 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
         }
     }
 
-    console.log('hangUp: caller', req.caller, ' callee', req.callee);
 
     const client = await clientPromise;
     const db = client.db(dbName);
@@ -245,7 +240,6 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
             _id: req.callee,
             caller: req.caller
         })
-        console.log('Ergebnis 1. delete in hangUp', res);
     
         if (!res.acknowledged) {
             console.error('deleteOne for callee in hangUp not acknowledged');
@@ -260,7 +254,6 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
             _id: req.caller,
             caller: req.caller
         })
-        console.log('Ergebnis 2. delete in hangUp', res);
         if (!res.acknowledged) {
             console.error('deleteOne for caller\'s dummy in hangUp not acknowledged');
         }
