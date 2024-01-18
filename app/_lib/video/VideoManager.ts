@@ -45,6 +45,7 @@ export default class VideoManager {
         this.fetcher = fetcher;
         this.handlers = handlers;
 
+        this.handlers.onToolbarData(this.toolbarData);
         this.sendCheckCall();
     }
 
