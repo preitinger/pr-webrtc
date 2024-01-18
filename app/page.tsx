@@ -396,7 +396,7 @@ export default function Home() {
                         if (videoManagerRef.current != null) {
                             videoManagerRef.current.close();
                         }
-                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, 2000, fetcher, handlers);
+                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, 10000, fetcher, handlers);
                     }
                 }
 
@@ -639,8 +639,10 @@ export default function Home() {
                     }
                 </div>
                 <div className={styles.right}>
-                    {/* <div>
+                    <div>
                         <h1>Tests</h1>
+                        <p>Empty string interpreted as bool is {'' ? 'true' : 'false'}</p>
+                        <p>String {"'.'"} is interpreted as bool {'.' ? 'true' : 'false'}</p>
                         <label>Caller <input key='testCaller' value={testCaller} onChange={(e) => { setTestCaller(e.target.value) }} /></label>
                         <label>Callee <input key='testCallee' value={testCallee} onChange={(e) => { setTestCallee(e.target.value) }} /></label>
                         <button onClick={async () => {
@@ -722,7 +724,7 @@ export default function Home() {
                             alert('resp: ' + JSON.stringify(resp));
 
                         }}>rejectCall</button>
-                    </div> */}
+                    </div>
                     {
                         !videoCall &&
                         <>

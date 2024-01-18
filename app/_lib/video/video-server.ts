@@ -58,7 +58,10 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
             _id: o.caller,
         }, {
             $set: {
-                caller: o.caller
+                caller: o.caller,
+                accepted: false,
+                messagesForCallee: [],
+                messagesForCaller: []
             }
         }, {
             upsert: true
@@ -160,6 +163,12 @@ export async function acceptCall(validatedUser: string, o: AcceptCallReq): Promi
     }
 }
 
+/**
+ * @deprecated because replaced by hangUp because also the dummy entry at the caller must be deleted
+ * @param validatedUser 
+ * @param req 
+ * @returns 
+ */
 export async function rejectCall(validatedUser: string, req: RejectCallReq): Promise<ApiResp<RejectCallResp>> {
     if (validatedUser !== req.callee) {
         return ({
@@ -225,30 +234,38 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
         }
     }
 
+    console.log('hangUp: caller', req.caller, ' callee', req.callee);
+
     const client = await clientPromise;
     const db = client.db(dbName);
     const calleesCol = db.collection<Callee>('callees');
 
-    {
+    try {
         const res = await calleesCol.deleteOne({
             _id: req.callee,
             caller: req.caller
         })
+        console.log('Ergebnis 1. delete in hangUp', res);
     
         if (!res.acknowledged) {
             console.error('deleteOne for callee in hangUp not acknowledged');
         }
     
+    } catch (reason) {
+        console.error('Exception in 1. delete in hangUp', reason);
     }
 
-    {
+    try {
         const res = await calleesCol.deleteOne({
             _id: req.caller,
             caller: req.caller
         })
+        console.log('Ergebnis 2. delete in hangUp', res);
         if (!res.acknowledged) {
             console.error('deleteOne for caller\'s dummy in hangUp not acknowledged');
         }
+    } catch(reason) {
+        console.error('Exception in 2. delete in hangUp', reason);
     }
 
 
@@ -331,7 +348,7 @@ export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promi
 }
 
 
-export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | RejectCallReq | OfferCallReq | CheckAcceptReq | HangUpReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | RejectCallResp | OfferCallResp | CheckAcceptResp | HangUpResp | WebRTCMsgResp>> {
+export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | OfferCallReq | CheckAcceptReq | HangUpReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | OfferCallResp | CheckAcceptResp | HangUpResp | WebRTCMsgResp>> {
     if (!checkToken(req.ownUser, req.sessionToken)) {
         return {
             type: 'error',
@@ -343,8 +360,8 @@ export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<Ch
             return checkCall(req.ownUser, req.req);
         case 'acceptCall':
             return acceptCall(req.ownUser, req.req);
-        case 'rejectCall':
-            return rejectCall(req.ownUser, req.req);
+        // case 'rejectCall':
+        //     return rejectCall(req.ownUser, req.req);
         case 'offerCall':
             return offerCall(req.ownUser, req.req);
         case 'checkAccept':

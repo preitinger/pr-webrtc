@@ -19,6 +19,12 @@ export const VideoComp = (props: VideoProps) => {
         console.log('updating srcObject to ', props.mediaStream);
         ref.current.srcObject = props.mediaStream;
 
+        if (props.mediaStream == null) {
+            ref.current.removeAttribute('src');
+            ref.current.removeAttribute('srcObject');
+            console.log('removed media attributes');
+        }
+
     }, [props.mediaStream])
 
     return (

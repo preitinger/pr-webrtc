@@ -107,9 +107,11 @@ export default class VideoManager {
         }
 
         if (this.remoteStream != null) {
-            this.remoteStream.getTracks().forEach(t => {{
-                t.stop();
-            }})
+            this.remoteStream.getTracks().forEach(t => {
+                {
+                    t.stop();
+                }
+            })
             this.remoteStream = null;
         }
 
@@ -125,6 +127,7 @@ export default class VideoManager {
         this.handlers.onRemoteStream(null);
         this.handlers.onToolbarData(null);
         this.handlers.onVideoCall(false);
+        console.log('closed video call');
         this.state = 'checkingCall';
         this.sendCheckCall();
 
@@ -177,8 +180,28 @@ export default class VideoManager {
         } else {
             this.state = 'sendingReject';
             this.handlers.onToolbarData(null);
-            this.pushReq<RejectCallReq, RejectCallResp>({
-                type: 'rejectCall',
+            // this.pushReq<RejectCallReq, RejectCallResp>({
+            //     type: 'rejectCall',
+            //     caller: this.receivedCall.caller,
+            //     callee: this.ownUser
+            // }).then(async resp => {
+            //     console.log('RejectCallResp', this.state, resp);
+            //     if (this.state !== 'sendingReject') return;
+
+            //     switch (resp.type) {
+            //         case 'authFailed': throw new Error("authFailed in rejectCall");
+            //         case 'error':
+            //             this.handlers.onError(resp.error);
+            //             this.state = 'error';
+            //             break;
+            //         case 'success':
+            //             this.state = 'checkingCall';
+            //             this.sendCheckCall();
+            //             break;
+            //     }
+            // })
+            this.pushReq<HangUpReq, HangUpResp>({
+                type: 'hangUp',
                 caller: this.receivedCall.caller,
                 callee: this.ownUser
             }).then(async resp => {
@@ -186,7 +209,6 @@ export default class VideoManager {
                 if (this.state !== 'sendingReject') return;
 
                 switch (resp.type) {
-                    case 'authFailed': throw new Error("authFailed in rejectCall");
                     case 'error':
                         this.handlers.onError(resp.error);
                         this.state = 'error';
@@ -218,6 +240,7 @@ export default class VideoManager {
                 try {
                     this.makingOffer = true;
                     await pc.setLocalDescription();
+                    if (this.state !== 'videoCall') return;
                     this.sendWebRTCMsg([{
                         type: 'description',
                         description: pc.localDescription
@@ -235,6 +258,9 @@ export default class VideoManager {
                 };
             };
             pc.onicecandidate = ({ candidate }) => {
+                console.log('onicecandidate', this.state, candidate)
+                if (this.state !== 'videoCall') return;
+                console.log('sending candidate', candidate)
                 this.sendWebRTCMsg([{
                     type: 'candidate',
                     candidate: candidate
@@ -242,6 +268,10 @@ export default class VideoManager {
             }
             try {
                 this.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+                if (this.state !== 'videoCall') {
+                    this.localStream.getTracks().forEach(t => t.stop());
+                    return;
+                }
 
                 for (const track of this.localStream.getTracks()) {
                     pc.addTrack(track, this.localStream);
@@ -326,10 +356,12 @@ export default class VideoManager {
         if (this.caller == null || this.callee == null) throw new Error('caller or callee null in sendWebRTCMsg?!');
 
         if (this.timeout != null) {
-            console.log('clearTimeout in sendWebRTCMsg')
+            console.log('sendWebRTCMsg: clearTimeout before pushReq')
             clearTimeout(this.timeout);
+            this.timeout = null;
         }
 
+        console.log('sendWebRTCMsg: before pushReq')
         this.pushReq<WebRTCMsgReq, WebRTCMsgResp>(
             {
                 type: 'webRTCMsg',
@@ -337,8 +369,8 @@ export default class VideoManager {
                 callee: this.callee,
                 messages: msg.map(o => JSON.stringify(o))
             }
-        ).then(resp => {
-            console.log('WebRTCMsgResp', this.state, resp);
+        ).then(async resp => {
+            console.log('sendWebRTCMsg: WebRTCMsgResp', this.state, resp);
             if (this.state !== 'videoCall') return;
             if (this.caller == null) throw new Error('caller null after WebRTCMsg?!');
             if (this.callee == null) throw new Error('callee null after WebRTCMsg?!');
@@ -354,11 +386,20 @@ export default class VideoManager {
                 case 'success':
                     const otherName = this.ownUser === this.caller ? this.callee : this.caller;
                     const polite = this.ownUser < otherName;
-                    resp.messages.forEach(msgStr => {
+                    for (const msgStr of resp.messages) {
                         const msg = JSON.parse(msgStr);
-                        this.handleWebRTCMsg(msg, polite);
-                    })
+                        await this.handleWebRTCMsg(msg, polite);
+                        if (this.state !== 'videoCall') return;
+                    }
+
+                    if (this.timeout != null) {
+                        console.log('sendWebRTCMsg: clearTimeout at success response')
+                        clearTimeout(this.timeout);
+                        this.timeout = null;
+                    }
+                    console.log('sendWebRTCMsg: before setTimeout');
                     this.timeout = setTimeout(() => {
+                        console.log('sendWebRTCMsg: running timeout');
                         this.sendWebRTCMsg([]);
                     }, this.repeatMs)
                     break;
@@ -375,9 +416,9 @@ export default class VideoManager {
 
     private async handleWebRTCMsg(data: any, polite: boolean) {
         const { description, candidate } = data;
-        // console.log('handleWebRTCMsg: data=', data, 'state=', this.state);
+        console.log('handleWebRTCMsg: data=', data, 'state=', this.state);
         const pc = this.peerConnection;
-        if (pc == null) throw new Error('peer connection null in handleWebRTCMsg?!');
+        if (pc == null) return; // possible because asynchronous
         try {
             if (description) {
                 console.log('handling description', description);
@@ -395,10 +436,12 @@ export default class VideoManager {
                 console.log('before setRemoteDescription');
                 await pc.setRemoteDescription(description);
                 console.log('after setRemoteDescription');
+                if (this.state !== 'videoCall') return;
                 if (description.type === "offer") {
                     console.log('handling offer');
                     await pc.setLocalDescription();
                     console.log('local description set for offer');
+                    if (this.state !== 'videoCall') return;
                     this.sendWebRTCMsg([{ description: pc.localDescription }])
                 }
             } else if (candidate) {
