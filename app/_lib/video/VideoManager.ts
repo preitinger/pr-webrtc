@@ -27,10 +27,10 @@ export interface VideoHandlers {
     onError: (error: string) => void;
 }
 
-const mediaConstraints = {
-    audio: true,
-    video: true
-}
+// const mediaConstraints = {
+//     audio: true,
+//     video: true
+// }
 
 export default class VideoManager {
     constructor(ownUser: string,
@@ -59,7 +59,7 @@ export default class VideoManager {
         this.fireUpdatedToolbarData({ type: 'idle' });
     }
 
-    onVideoToolbarEvent(e: VideoToolbarEvent) {
+    async onVideoToolbarEvent(e: VideoToolbarEvent) {
         switch (e.type) {
             case 'accept':
                 this.onAccept(e.accept);
@@ -76,11 +76,98 @@ export default class VideoManager {
                         break;
                 }
                 break;
-            case 'ringOnCall':
-                this.ringOnCall = e.checked;
+            case 'camera':
                 this.handlers.onToolbarData(this.toolbarData = {
                     ...this.toolbarData,
-                    ringOnCall: this.ringOnCall
+                    camera: e.checked
+                })
+                const pc = this.peerConnection;
+                if (pc != null) {
+                    if (!e.checked) {
+                        for (const sender of this.videoSenders) {
+                            // sender.track?.stop();
+                            pc.removeTrack(sender);
+                            this.handlers.onLocalStream(null);
+                        }
+                        this.videoSenders.length = 0;
+                    } else {
+                        if (this.localStream != null) {
+                            const videoTracks = this.localStream.getVideoTracks();
+                            if (videoTracks.length === 0) {
+                                this.localStream = await navigator.mediaDevices.getUserMedia({
+                                    audio: true, video: true
+                                });
+                                if (this.state !== 'videoCall') {
+                                    this.localStream.getTracks().forEach(t => t.stop());
+                                    return;
+                                }
+
+                                this.audioSenders.length = 0;
+                                this.videoSenders.length = 0;
+
+                                for (const track of this.localStream.getAudioTracks()) {
+                                    this.audioSenders.push(pc.addTrack(track, this.localStream));
+                                }
+
+                                for (const track of this.localStream.getVideoTracks()) {
+                                    this.videoSenders.push(pc.addTrack(track, this.localStream));
+                                }
+
+                                const clonedStreamWithoutAudio = this.localStream.clone();
+                                clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
+                                    t.stop();
+                                })
+
+                                this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                            } else {
+                                this.videoSenders.length = 0;
+                                for (const track of this.localStream.getVideoTracks()) {
+                                    this.videoSenders.push(pc.addTrack(track, this.localStream));
+                                }
+    
+                                const clonedStreamWithoutAudio = this.localStream.clone();
+                                clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
+                                    t.stop();
+                                })
+    
+                                this.handlers.onLocalStream(null);
+                                setTimeout(() => {
+                                    if (this.state !== 'videoCall') return;
+                                    this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                                }, 10)
+                            }
+
+                        }
+                    }
+
+                    // this.localStream = await navigator.mediaDevices.getUserMedia({
+                    //     audio: true,
+                    //     video: e.checked
+                    // })
+
+                    // if (this.state !== 'videoCall') {
+                    //     this.localStream.getTracks().forEach(t => t.stop());
+                    //     return;
+                    // }
+
+                    // this.senders.length = 0;
+
+                    // for (const track of this.localStream.getTracks()) {
+                    //     this.senders.push(pc.addTrack(track, this.localStream));
+                    // }
+
+                    // const clonedStreamWithoutAudio = this.localStream.clone();
+                    // clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
+                    //     t.stop();
+                    // })
+
+                    // this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                }
+                break;
+            case 'ringOnCall':
+                this.handlers.onToolbarData(this.toolbarData = {
+                    ...this.toolbarData,
+                    ringOnCall: e.checked
                 });
                 break;
         }
@@ -141,7 +228,8 @@ export default class VideoManager {
     private updateToolbarData(part: ToolbarDataPart): ToolbarData {
         return (this.toolbarData = {
             ...part,
-            ringOnCall: this.ringOnCall
+            ringOnCall: this.toolbarData.ringOnCall,
+            camera: this.toolbarData.camera
         })
     }
 
@@ -157,7 +245,8 @@ export default class VideoManager {
             this.state = 'sendingAccept';
             this.fireUpdatedToolbarData({
                 type: 'videoCall',
-                caller: this.caller ?? ''
+                caller: this.caller ?? '',
+                connecting: true
             });
             this.pushReq<AcceptCallReq, AcceptCallResp>({
                 type: 'acceptCall',
@@ -218,10 +307,19 @@ export default class VideoManager {
     }
 
     private async startVideoCall() {
+        // console.log('startVideoCall');
         if (this.caller == null) throw new Error('caller null in startVideoCall?!');
         if (this.callee == null) throw new Error('callee null in startVideoCall?!');
 
         this.state = 'videoCall';
+        this.handlers.onVideoCall(true);
+        this.handlers.onToolbarData(this.toolbarData = {
+            type: 'videoCall',
+            connecting: true,
+            caller: this.caller,
+            camera: this.toolbarData.camera,
+            ringOnCall: this.toolbarData.ringOnCall
+        })
 
         {
             const pc = this.peerConnection = new RTCPeerConnection(config);
@@ -245,10 +343,19 @@ export default class VideoManager {
                 }
 
             };
-            pc.ontrack = ({ track, streams }) => {
-                track.onunmute = () => {
-                    this.handlers.onRemoteStream(this.remoteStream = streams[0]);
-                };
+            pc.ontrack = (e) => {
+
+                if (e.streams.length > 0) {
+                    const newStream = e.streams[e.streams.length - 1];
+                    this.handlers.onRemoteStream(this.remoteStream = newStream);
+                    // console.log('ontrack in state', this.state, ' and toolbarData.type', this.toolbarData.type);
+                    if (this.toolbarData.type === 'videoCall' && this.toolbarData.connecting) {
+                        this.handlers.onToolbarData(this.toolbarData = {
+                            ...this.toolbarData,
+                            connecting: false
+                        });
+                    }
+                }
             };
             pc.onicecandidate = ({ candidate }) => {
                 if (this.state !== 'videoCall') return;
@@ -258,14 +365,24 @@ export default class VideoManager {
                 }])
             }
             try {
-                this.localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+                this.localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: this.toolbarData.camera
+                });
                 if (this.state !== 'videoCall') {
                     this.localStream.getTracks().forEach(t => t.stop());
                     return;
                 }
 
-                for (const track of this.localStream.getTracks()) {
-                    pc.addTrack(track, this.localStream);
+                this.audioSenders.length = 0;
+                this.videoSenders.length = 0;
+
+                for (const track of this.localStream.getAudioTracks()) {
+                    this.audioSenders.push(pc.addTrack(track, this.localStream));
+                }
+
+                for (const track of this.localStream.getVideoTracks()) {
+                    this.videoSenders.push(pc.addTrack(track, this.localStream));
                 }
 
                 const clonedStreamWithoutAudio = this.localStream.clone();
@@ -274,17 +391,12 @@ export default class VideoManager {
                 })
 
                 this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                this.sendWebRTCMsg([]);
             } catch (err) {
                 console.error(err);
             }
         }
 
-        this.handlers.onVideoCall(true);
-        this.handlers.onToolbarData({
-            type: 'videoCall',
-            caller: this.caller,
-            ringOnCall: this.toolbarData.ringOnCall
-        })
     }
 
     onCall(callee: string) {
@@ -400,6 +512,7 @@ export default class VideoManager {
 
                 this.ignoreOffer = !polite && offerCollision;
                 if (this.ignoreOffer) {
+                    // console.warn('ignoring offer');
                     return;
                 }
 
@@ -414,6 +527,8 @@ export default class VideoManager {
                 try {
                     if (pc.signalingState !== 'closed') {
                         await pc.addIceCandidate(candidate);
+                    } else {
+                        console.warn('ignoring ice candidate');
                     }
                 } catch (err) {
                     if (!this.ignoreOffer) {
@@ -462,7 +577,6 @@ export default class VideoManager {
                             caller: this.ownUser,
                             callee: this.ownUser
                         }).then(resp => {
-                            console.log('resp of hangUp on dummy offer', this.state, resp);
                             if (this.state !== 'checkingCall') return;
                             this.clearMyTimeout();
                             this.timeout = setTimeout(() => {
@@ -558,6 +672,7 @@ export default class VideoManager {
     private handlers: VideoHandlers;
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
-    private ringOnCall: boolean = false;
-    private toolbarData: ToolbarData = { type: 'idle', ringOnCall: this.ringOnCall };
+    private toolbarData: ToolbarData = { type: 'idle', ringOnCall: false, camera: true };
+    private audioSenders: RTCRtpSender[] = [];
+    private videoSenders: RTCRtpSender[] = [];
 }

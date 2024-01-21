@@ -1,19 +1,25 @@
 .toolbar {
-    margin-top: 4em;
+    @media(min-width: 1000px) {
+        margin-top: 4em;
+    }
 }
+
 .video {
     @media(min-width: 1000px) {
         width: 500px;
         height: 500px;
-    } 
+    }
+
     @media(max-width: 999px) {
         margin: 0;
         width: 100%;
         height: auto;
         padding: 0;
     }
+
     /* border: 1px solid black; */
 }
+
 .accept {
     background-image: url('/accept-call-64x64.png');
     background-color: transparent;
@@ -21,6 +27,7 @@
     height: 64px;
     border: none;
 }
+
 .reject {
     background-image: url('/call-missed-64x64.png');
     background-color: transparent;
@@ -28,6 +35,14 @@
     height: 64px;
     border: none;
 }
+
 .offer {
     font-size: larger;
+}
+
+.toolbar input[type='checkbox'], .toolbar label {
+    cursor: pointer;
+}
+.connecting {
+    color: red;
 }

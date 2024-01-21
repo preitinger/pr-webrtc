@@ -571,7 +571,6 @@ export default function Home() {
         }
 
         navigator.mediaDevices.getUserMedia(mediaConstraints).then(mediaStream => {
-            console.log('before setLocalMediaStream');
             setLocalMediaStream(mediaStream);
         })
 
@@ -579,8 +578,13 @@ export default function Home() {
 
     return (
         <>
-            <header className={styles.header}>pr-webRTC - a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</header>
-            <main className={styles.main}>
+            <div className={styles.top}>
+                <button className={styles.logout} onClick={onLogout}>Logout</button>
+                <div className={styles.header}>
+                    pr-webRTC - a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN
+                </div>
+            </div>
+            <div className={styles.main}>
                 <div className={styles.left}>
                     {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
                     <ChatUserListComp key='userList' userListState={userList} small={videoCall} onClick={onUserClick} onKey={onUserKey} />
@@ -588,7 +592,6 @@ export default function Home() {
                         !videoCall &&
                         <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
                     }
-                    <button onClick={onLogout}>Logout</button>
                     {
                         toolbarData != null &&
                         <VideoToolbarComp data={toolbarData} onEvent={(e) => {
@@ -612,6 +615,9 @@ export default function Home() {
                     }
                 </div>
                 <div className={styles.right}>
+                    <button onClick={() => {
+                        window.open('/api/webRTC/mini', 'webRTC-mini', "directories=0,titlebar=0,toolbar=0,location=0,status=0,menubar=0,scrollbars=no,resizable=no,width=400,height=350");
+                    }}>Test window</button>
                     {/* <div>
                         <h1>Tests</h1>
                         <p>Empty string interpreted as bool is {'' ? 'true' : 'false'}</p>
@@ -718,7 +724,7 @@ export default function Home() {
                         <VideoComp key='remoteMedia' mediaStream={remoteMediaStream} />
                     </div>
                 </div>
-            </main>
+            </div>
             {
                 serverHint &&
                 <ModalDialog key='loginDlg'>
