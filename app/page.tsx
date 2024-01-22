@@ -18,12 +18,20 @@ import { CheckCallReq, OfferCallReq, OfferCallResp, RejectCallReq } from "./_lib
 import { TestReq as TestReq, TestResp as TestResp } from './api/tests/testOfferCall/types';
 import { ToolbarData, VideoComp, VideoToolbarComp } from './_lib/video/video-client';
 import VideoManager, { ReceivedCall, VideoHandlers } from './_lib/video/VideoManager';
+import Link from 'next/link';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
 const chatId = 'pr-webrtc';
 
-interface LoginState {
+type LoginState = {
+    type: 'welcome';
+} | {
+    type: 'registering';
+} | {
+    type: 'loggingIn';
+} | {
+    type: 'done';
     ownUser: string | null;
     sessionToken: string | null;
 }
@@ -71,8 +79,7 @@ function exampleLines() {
 
 export default function Home() {
     const [loginState, setLoginState] = useState<LoginState>({
-        ownUser: null,
-        sessionToken: null
+        type: 'welcome'
     })
     const [serverHint, setServerHint] = useState<boolean>(false);
 
@@ -220,7 +227,15 @@ export default function Home() {
     }
 
     function onDlgCancel() {
-        alert('dlg canceled')
+        switch (loginState.type) {
+            case 'loggingIn':
+                // no break
+            case 'registering':
+                setLoginState({
+                    type: 'welcome'
+                });
+                break;
+        }
     }
 
     function onTimeout() {
@@ -354,6 +369,7 @@ export default function Home() {
                     return;
                 } else if (loginRes.type === 'success') {
                     setLoginState({
+                        type: 'done',
                         ownUser: loginName,
                         sessionToken: loginRes.token
                     })
@@ -387,8 +403,11 @@ export default function Home() {
                             onRemoteStream: (s) => {
                                 setRemoteMediaStream(s);
                             },
-                            onHint: (hint: string) => {
+                            onHint: (hint: string, alert?: boolean) => {
                                 pushHintLine(hint);
+                                if (alert) {
+                                    window.alert(hint);
+                                }
                             },
                             onError: (error: string) => {
                                 pushErrorLine(error);
@@ -431,6 +450,9 @@ export default function Home() {
                     break;
                 case 'success':
                     alert('Registration successful! You can now login with this user and password.')
+                    setLoginState({
+                        type: 'loggingIn'
+                    })
                     break;
             }
         }).finally(() => {
@@ -438,13 +460,13 @@ export default function Home() {
         })
     }
 
-    useEffect(() => {
-        if (loginState.ownUser == null) {
-            loginInputRef.current?.focus();
-        } else {
-            chatInputRef.current?.focus();
-        }
-    }, [loginState.ownUser]);
+    // useEffect(() => {
+    //     if (loginState.ownUser == null) {
+    //         loginInputRef.current?.focus();
+    //     } else {
+    //         chatInputRef.current?.focus();
+    //     }
+    // }, [loginState.ownUser]);
 
     useLayoutEffect(() => {
         if (scrollDown) {
@@ -459,6 +481,12 @@ export default function Home() {
     function onLoginKeyDown(e: KeyboardEvent<HTMLInputElement>) {
         if (e.key === 'Enter') {
             onLogin();
+        }
+    }
+
+    function onRegisterKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+        if (e.key === 'Enter') {
+            onRegister();
         }
     }
 
@@ -511,8 +539,7 @@ export default function Home() {
         ownUserRef.current = null;
         sessionTokenRef.current = null;
         setLoginState({
-            ownUser: null,
-            sessionToken: null,
+            type: 'welcome',
         })
         requestStateRef.current = 'logging in';
         if (timeout.current != null) {
@@ -533,6 +560,10 @@ export default function Home() {
         if (ownUserRef.current == null) return;
         if (sessionTokenRef.current == null) return;
         if (accumulatedFetcher.current == null) return;
+
+        if (videoManagerRef.current != null) {
+            videoManagerRef.current.close();
+        }
 
         const req: LogoutReq = {
             type: 'logout',
@@ -576,49 +607,109 @@ export default function Home() {
 
     }
 
+    const [imgWidth, setImgWidth] = useState<number>(300);
+
+    function onResize() {
+        const width800 = window.matchMedia('(min-width: 800px)');
+
+        if (width800.matches) {
+            setImgWidth(750);
+        } else {
+            setImgWidth(300);
+        }
+    }
+
+    useEffect(() => {
+        onResize();
+        window.addEventListener('resize', onResize);
+
+        return () => {
+            window.removeEventListener('resize', onResize);
+        }
+    }, [])
+
+    function enterRegister() {
+        setLoginState({
+            type: 'registering'
+        })
+    }
+
+    function enterLogin() {
+        setLoginState({
+            type: 'loggingIn'
+        })
+    }
+
     return (
         <>
             <div className={styles.top}>
-                <button className={styles.logout} onClick={onLogout}>Logout</button>
+                {
+                    loginState.type === 'done' &&
+                    <div>
+                    <button className={`${styles.redButton} ${styles.logout}`} onClick={onLogout}>Logout</button>
+                    </div>
+                }
+
                 <div className={styles.header}>
-                    pr-webRTC - a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN
+                    <h4>pr-webRTC</h4><h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+                    {
+                        loginState.type === 'welcome' &&
+                        <div>
+                            <Image className={styles.img} src='/Dekobildchen.svg' alt='Image for video calls as decoration' width={imgWidth} height={imgWidth * 500 / 750} priority /><br />
+                            <div className={styles.imgAttribute}><a href="https://www.freepik.com/free-vector/video-conferencing-concept-landing-page_5155828.htm#query=video%20call&position=13&from_view=search&track=ais&uuid=d88bd399-7c39-4f67-8c62-d2715f65f654">Image by pikisuperstar</a> on Freepik</div>
+
+                            <p>
+                                {"This is mainly for demonstration and my personal usage. So, registration is without the necessity to provide any personal data. Not even an email address is required. Just, choose a user name and a password. That's it. (At least as long as the usage is within reasonable borders... ;-)"}
+                            </p>
+                            <div className={styles.buttonRow}>
+                                {/* <Link className={styles.register} href='/register'>Register now</Link>
+                                <div>and then</div>
+                                <Link className={styles.login} href='/login'>Login</Link> */}
+                                <button onClick={enterRegister} className={styles.redButton}>Register now</button>
+                                <p>and then</p>
+                                <button className={styles.greenButton} onClick={enterLogin}>Login</button>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
-            <div className={styles.main}>
-                <div className={styles.left}>
-                    {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
-                    <ChatUserListComp key='userList' userListState={userList} small={videoCall} onClick={onUserClick} onKey={onUserKey} />
-                    {
-                        !videoCall &&
-                        <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
-                    }
-                    {
-                        toolbarData != null &&
-                        <VideoToolbarComp data={toolbarData} onEvent={(e) => {
-                            videoManagerRef.current?.onVideoToolbarEvent(e);
-                        }} />
-                    }
-                    {
-                        videoCall &&
-                        <>
-                            <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
-                            <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
-                            {
-                                !(connectionError && connectionErrorConfirmed) &&
-                                <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
-                            }
-                            {
-                                (connectionError && connectionErrorConfirmed) &&
-                                <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
-                            }
-                        </>
-                    }
-                </div>
-                <div className={styles.right}>
-                    <button onClick={() => {
-                        window.open('/api/webRTC/mini', 'webRTC-mini', "directories=0,titlebar=0,toolbar=0,location=0,status=0,menubar=0,scrollbars=no,resizable=no,width=400,height=350");
-                    }}>Test window</button>
-                    {/* <div>
+            {
+                loginState.type === 'done' &&
+                <div className={styles.main}>
+                    <div className={styles.left}>
+                        {/* <UserList userListState={userList} onClick={onUserClick} onKey={onUserKey} /> */}
+                        <ChatUserListComp key='userList' userListState={userList} small={videoCall} onClick={onUserClick} onKey={onUserKey} />
+                        {
+                            !videoCall &&
+                            <button className={styles.call} onClick={onCall}>Call {userList.selected === -1 ? '(nobody selected)' : userList.users[userList.selected].name}</button>
+                        }
+                        {
+                            toolbarData != null &&
+                            <VideoToolbarComp data={toolbarData} onEvent={(e) => {
+                                videoManagerRef.current?.onVideoToolbarEvent(e);
+                            }} />
+                        }
+                        {
+                            videoCall &&
+                            <>
+                                <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
+                                <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
+                                {
+                                    !(connectionError && connectionErrorConfirmed) &&
+                                    <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                                }
+                                {
+                                    (connectionError && connectionErrorConfirmed) &&
+                                    <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
+                                }
+                            </>
+                        }
+                    </div>
+                    <div className={styles.right}>
+                        {/* <button onClick={() => {
+                            window.open('/api/webRTC/mini', 'webRTC-mini', "directories=0,titlebar=0,toolbar=0,location=0,status=0,menubar=0,scrollbars=no,resizable=no,width=400,height=350");
+                        }}>Test window</button> */}
+                        {/* <div>
                         <h1>Tests</h1>
                         <p>Empty string interpreted as bool is {'' ? 'true' : 'false'}</p>
                         <p>String {"'.'"} is interpreted as bool {'.' ? 'true' : 'false'}</p>
@@ -704,27 +795,31 @@ export default function Home() {
 
                         }}>rejectCall</button>
                     </div> */}
-                    {
-                        !videoCall &&
-                        <>
-                            <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
-                            <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
-                            {
-                                !(connectionError && connectionErrorConfirmed) &&
-                                <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
-                            }
-                            {
-                                (connectionError && connectionErrorConfirmed) &&
-                                <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
-                            }
-                        </>
-                    }
-                    <div>
-                        <VideoComp key='localMedia' mediaStream={localMediaStream} />
-                        <VideoComp key='remoteMedia' mediaStream={remoteMediaStream} />
+                        {
+                            !videoCall &&
+                            <>
+                                <ChatPanelComp ref={chatLinesRef} lines={chatLines} onScroll={onScroll} small={videoCall} />
+                                <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chatInput} onChange={(e) => { setChatInput(e.target.value); }} onKeyDown={onChatKeyDown} />
+                                {
+                                    !(connectionError && connectionErrorConfirmed) &&
+                                    <button key='send' onClick={onChatSend} disabled={chatInputFrozen}>Send</button>
+                                }
+                                {
+                                    (connectionError && connectionErrorConfirmed) &&
+                                    <button key='tryAgain' onClick={onRetryConnect}>Try again</button>
+                                }
+                            </>
+                        }
+                        {
+                            videoCall &&
+                            <div>
+                            <VideoComp showConnecting={false} key='localMedia' mediaStream={localMediaStream} />
+                            <VideoComp showConnecting={true} key='remoteMedia' mediaStream={remoteMediaStream} />
+                        </div>
+                        }
                     </div>
                 </div>
-            </div>
+            }
             {
                 serverHint &&
                 <ModalDialog key='loginDlg'>
@@ -732,9 +827,10 @@ export default function Home() {
                 </ModalDialog>
             }
             {
-                loginState.ownUser == null && !serverHint &&
+                loginState.type === 'loggingIn' && !serverHint &&
                 <ModalDialog key='loginDlg'>
                     <EscapableFlexComp onCancel={onDlgCancel}>
+                        <h2>Login (already registered)</h2>
                         <label>User</label>
                         <input ref={loginInputRef} value={loginName} onChange={(e) => {
                             setLoginName(e.target.value)
@@ -743,8 +839,26 @@ export default function Home() {
                         <input type='password' value={loginPasswd} onChange={(e) => {
                             setLoginPasswd(e.target.value);
                         }} onKeyDown={(e) => onLoginKeyDown(e)} />
-                        <button onClick={onLogin}>Login (when already registered)</button>
-                        <button onClick={onRegister}>Register (when new user)</button>
+                        <button className={styles.greenButton} onClick={onLogin}>Login</button>
+                        <button className={styles.redButton} onClick={onDlgCancel}>Cancel</button>
+                    </EscapableFlexComp>
+                </ModalDialog>
+            }
+            {
+                loginState.type === 'registering' && !serverHint &&
+                <ModalDialog key='loginDlg'>
+                    <EscapableFlexComp onCancel={onDlgCancel}>
+                        <h2>Register as a new user</h2>
+                        <label>User</label>
+                        <input ref={loginInputRef} value={loginName} onChange={(e) => {
+                            setLoginName(e.target.value)
+                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
+                        <label>Password</label>
+                        <input type='password' value={loginPasswd} onChange={(e) => {
+                            setLoginPasswd(e.target.value);
+                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
+                        <button className={styles.greenButton} onClick={onRegister}>Register</button>
+                        <button className={styles.redButton} onClick={onDlgCancel}>Cancel</button>
                     </EscapableFlexComp>
                 </ModalDialog>
 

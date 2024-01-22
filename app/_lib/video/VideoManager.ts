@@ -23,7 +23,7 @@ export interface VideoHandlers {
     onVideoCall: (videoCall: boolean) => void;
     onLocalStream: (stream: MediaStream | null) => void;
     onRemoteStream: (stream: MediaStream | null) => void;
-    onHint: (hint: string) => void;
+    onHint: (hint: string, alert?:boolean) => void;
     onError: (error: string) => void;
 }
 
@@ -51,6 +51,7 @@ export default class VideoManager {
 
     close() {
         if (this.state === 'error') return;
+        this.closeVideoCall(false);
         this.clearMyTimeout();
 
         this.state = 'closed';
@@ -67,10 +68,10 @@ export default class VideoManager {
             case 'hangUp':
                 switch (this.state) {
                     case 'checkingAccept':
-                        this.closeVideoCall();
+                        this.closeVideoCall(true);
                         break;
                     case 'videoCall':
-                        this.closeVideoCall();
+                        this.closeVideoCall(true);
                         break;
                     default:
                         break;
@@ -113,12 +114,12 @@ export default class VideoManager {
                                     this.videoSenders.push(pc.addTrack(track, this.localStream));
                                 }
 
-                                const clonedStreamWithoutAudio = this.localStream.clone();
-                                clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
+                                this.clonedStreamWithoutAudio = this.localStream.clone();
+                                this.clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
                                     t.stop();
                                 })
 
-                                this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                                this.handlers.onLocalStream(this.clonedStreamWithoutAudio);
                             } else {
                                 this.videoSenders.length = 0;
                                 for (const track of this.localStream.getVideoTracks()) {
@@ -181,7 +182,7 @@ export default class VideoManager {
 
     }
 
-    private closeVideoCall() {
+    private closeVideoCall(andCheckCall: boolean) {
         this.clearMyTimeout();
 
         const pc = this.peerConnection;
@@ -208,6 +209,13 @@ export default class VideoManager {
             this.remoteStream = null;
         }
 
+        if (this.clonedStreamWithoutAudio != null) {
+            this.clonedStreamWithoutAudio.getTracks().forEach(t => {
+                t.stop();
+            })
+            this.clonedStreamWithoutAudio = null;
+        }
+
         this.peerConnection = null;
         if (this.caller == null) throw new Error('caller null before hangUp?!');
         if (this.callee == null) throw new Error('callee null before hangUp?!');
@@ -220,8 +228,11 @@ export default class VideoManager {
         this.handlers.onRemoteStream(null);
         this.fireUpdatedToolbarData({ type: 'idle' });
         this.handlers.onVideoCall(false);
-        this.state = 'checkingCall';
-        this.sendCheckCall();
+
+        if (andCheckCall) {
+            this.state = 'checkingCall';
+            this.sendCheckCall();
+        }
 
     }
 
@@ -385,12 +396,12 @@ export default class VideoManager {
                     this.videoSenders.push(pc.addTrack(track, this.localStream));
                 }
 
-                const clonedStreamWithoutAudio = this.localStream.clone();
-                clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
+                this.clonedStreamWithoutAudio = this.localStream.clone();
+                this.clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
                     t.stop();
                 })
 
-                this.handlers.onLocalStream(clonedStreamWithoutAudio);
+                this.handlers.onLocalStream(this.clonedStreamWithoutAudio);
                 this.sendWebRTCMsg([]);
             } catch (err) {
                 console.error(err);
@@ -406,7 +417,7 @@ export default class VideoManager {
             return;
         }
         if (callee === this.ownUser) {
-            this.handlers.onHint("Please don't call yourself.");
+            this.handlers.onHint("Please don't call yourself.", true);
             return;
         }
 
@@ -469,7 +480,7 @@ export default class VideoManager {
             switch (resp.type) {
                 case 'closed':
                     this.handlers.onHint('The call has been closed.');
-                    this.closeVideoCall();
+                    this.closeVideoCall(true);
                     break;
                 case 'error':
                     this.handlers.onError(resp.error);
@@ -531,7 +542,7 @@ export default class VideoManager {
                         console.warn('ignoring ice candidate');
                     }
                 } catch (err) {
-                    if (!this.ignoreOffer) {
+                    if (!this.ignoreOffer && pc.remoteDescription != null) {
                         throw err;
                     }
                 }
@@ -672,6 +683,7 @@ export default class VideoManager {
     private handlers: VideoHandlers;
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
+    private clonedStreamWithoutAudio: MediaStream | null = null;
     private toolbarData: ToolbarData = { type: 'idle', ringOnCall: false, camera: true };
     private audioSenders: RTCRtpSender[] = [];
     private videoSenders: RTCRtpSender[] = [];

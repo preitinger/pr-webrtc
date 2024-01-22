@@ -2,21 +2,21 @@
 textarea,
 input,
 button {
-    border-radius: 1em;
-    padding: 1em;
-    margin: 1em;
+    border-radius: 1rem;
+    padding: 1rem;
+    margin: 1rem;
 }
-p {
-    margin: 1em;
+p, h2, h4, h5 {
+    margin: 1rem;
 }
 
 label {
-    margin: 1em;
+    margin: 1rem;
 }
 
 body {
     @media(min-width: 1000px) {
-        padding: 2em;
+        padding: 2rem;
     }
     @media(max-width: 999px) {
         padding: 0;
@@ -33,7 +33,7 @@ button:disabled {
 }
 
 :focus {
-    border-radius: 1em;
+    border-radius: 1rem;
     outline: 1px dashed black;
     outline-offset: 1px;
 }

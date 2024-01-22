@@ -7,20 +7,27 @@ import { ReceivedCall } from "./VideoManager";
 
 export interface VideoProps {
     mediaStream: MediaStream | null;
+    showConnecting?: boolean
 }
 
 export const VideoComp = (props: VideoProps) => {
 
-    const ref = useRef<HTMLVideoElement | null>(null);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
 
     useEffect(() => {
-        if (ref.current == null) return;
-        ref.current.srcObject = props.mediaStream;
+        if (videoRef.current == null) return;
+        videoRef.current.srcObject = props.mediaStream;
+        if (props.mediaStream != null) {
+            videoRef.current.scrollIntoView();
+        }
 
     }, [props.mediaStream])
 
     return (
-        <video className={styles.video} ref={ref} autoPlay={true} />
+        props.mediaStream == null && props.showConnecting ?
+            <p>Connecting ...</p> :
+            <video className={styles.video} ref={videoRef} autoPlay={true} />
+
     )
 }
 
