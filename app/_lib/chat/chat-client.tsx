@@ -60,16 +60,13 @@ export function ChatUserListItemComp(props: ChatUserListItemProps) {
         <li role='option' aria-selected={props.selected} className={`${styles.userListItemOuter}`}
             onClick={() => props.onClick()}
             onKeyDown={(e) => {
-                console.log('e.key', e.key);
                 if (e.key === ' ' || e.key === 'Enter') {
                     props.onClick();
                     e.stopPropagation();
                     e.preventDefault();
                 } else if (e.key === 'ArrowDown') {
-                    console.log('ArrowDown on UserListItem');
                     props.onDown(e);
                 } else if (e.key === 'ArrowUp') {
-                    console.log('ArrowUp on UserListItem');
                     props.onUp(e);
                 }
             }}
@@ -131,7 +128,6 @@ export function ChatUserListComp(props: ChatUserListProps) {
                                     selected={i === props.userListState.selected}
                                     onDown={(e: KeyboardEvent<HTMLLIElement>) => {
                                         if (i < props.userListState.users.length - 1) {
-                                            console.log('new focus', i + 1);
                                             setFocus(i + 1);
                                             e.stopPropagation();
                                             e.preventDefault();
@@ -139,7 +135,6 @@ export function ChatUserListComp(props: ChatUserListProps) {
                                     }}
                                     onUp={(e: KeyboardEvent<HTMLLIElement>) => {
                                         if (i > 0) {
-                                            console.log('new focus', i - 1);
                                             setFocus(i - 1);
                                             e.stopPropagation();
                                             e.preventDefault();

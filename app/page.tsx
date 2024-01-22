@@ -253,12 +253,12 @@ export default function Home() {
                 }
                 break;
             default:
-                throw new Error('Illegal state onTimeout: ' + requestStateRef.current);
+                break;
         }
     }
 
     function executeRequest() {
-        if (ownUserRef.current == null) throw new Error('own user null');
+        if (ownUserRef.current == null) return;
         if (sessionTokenRef.current == null) throw new Error('session token null');
         const req: ChatReq = {
             type: 'chat',
@@ -270,8 +270,11 @@ export default function Home() {
         }
         console.debug('vor myFetchPost: req', req);
         if (accumulatedFetcher.current == null) throw new Error('accumulatedFetcher null');
+        console.log('pushing chatReq');
         accumulatedFetcher.current.push<ChatReq, ChatResp>(req).
         /* apiFetchPost<ChatReq, ChatResp>('/api/chat', req). */then(resp => {
+            if (ownUserRef.current == null) return;
+
             if (resp.type === 'error') {
                 console.error('Error on server', resp.error);
                 pushErrorLine('Error on server: ' + resp.error);
@@ -317,6 +320,7 @@ export default function Home() {
             }
 
         }).catch(reason => {
+            if (ownUserRef.current == null) return;
             if (reason instanceof Error) {
                 if (reason.message === 'Failed to fetch') {
                     pushErrorLine('No connection to the server.')
@@ -430,6 +434,9 @@ export default function Home() {
             }).catch(reason => {
                 console.error(reason);
                 alert('Server problem');
+                setLoginState({
+                    type: 'loggingIn'
+                })
             }).finally(() => {
                 setServerHint(false);
             })
@@ -508,10 +515,8 @@ export default function Home() {
                 lineToSendRef.current = chatInput
                 break;
             default:
-                throw new Error('illegal state in onChatSend' + requestStateRef.current);
+                break;
         }
-
-        console.debug('state nach onChatSend', requestStateRef.current);
     }
 
     const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
