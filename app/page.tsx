@@ -270,7 +270,6 @@ export default function Home() {
         }
         console.debug('vor myFetchPost: req', req);
         if (accumulatedFetcher.current == null) throw new Error('accumulatedFetcher null');
-        console.log('pushing chatReq');
         accumulatedFetcher.current.push<ChatReq, ChatResp>(req).
         /* apiFetchPost<ChatReq, ChatResp>('/api/chat', req). */then(resp => {
             if (ownUserRef.current == null) return;
