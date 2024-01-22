@@ -217,13 +217,17 @@ export default class VideoManager {
         }
 
         this.peerConnection = null;
-        if (this.caller == null) throw new Error('caller null before hangUp?!');
-        if (this.callee == null) throw new Error('callee null before hangUp?!');
-        this.pushReq<HangUpReq, HangUpResp>({
-            type: 'hangUp',
-            caller: this.caller,
-            callee: this.callee
-        })
+
+        if (this.caller != null && this.callee != null) {
+            if (this.caller == null) throw new Error('caller null before hangUp?!');
+            if (this.callee == null) throw new Error('callee null before hangUp?!');
+            this.pushReq<HangUpReq, HangUpResp>({
+                type: 'hangUp',
+                caller: this.caller,
+                callee: this.callee
+            })
+        }
+        this.caller = this.callee = null;
         this.handlers.onLocalStream(null);
         this.handlers.onRemoteStream(null);
         this.fireUpdatedToolbarData({ type: 'idle' });
