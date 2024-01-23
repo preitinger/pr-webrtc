@@ -23,7 +23,7 @@ export interface VideoHandlers {
     onVideoCall: (videoCall: boolean) => void;
     onLocalStream: (stream: MediaStream | null) => void;
     onRemoteStream: (stream: MediaStream | null) => void;
-    onHint: (hint: string, alert?:boolean) => void;
+    onHint: (hint: string, alert?: boolean) => void;
     onError: (error: string) => void;
 }
 
@@ -44,6 +44,17 @@ export default class VideoManager {
         this.repeatMs = repeatMs;
         this.fetcher = fetcher;
         this.handlers = handlers;
+
+        {
+            let x = localStorage.getItem('VideoManager.camera');
+            if (x != null) {
+                this.toolbarData.camera = JSON.parse(x);
+            }
+            x = localStorage.getItem('VideoManager.ringOnCall');
+            if (x != null) {
+                this.toolbarData.ringOnCall = JSON.parse(x);
+            }
+        }
 
         this.handlers.onToolbarData(this.toolbarData);
         this.sendCheckCall();
@@ -82,6 +93,7 @@ export default class VideoManager {
                     ...this.toolbarData,
                     camera: e.checked
                 })
+                localStorage.setItem('VideoManager.camera', JSON.stringify(this.toolbarData.camera));
                 const pc = this.peerConnection;
                 if (pc != null) {
                     if (!e.checked) {
@@ -125,12 +137,12 @@ export default class VideoManager {
                                 for (const track of this.localStream.getVideoTracks()) {
                                     this.videoSenders.push(pc.addTrack(track, this.localStream));
                                 }
-    
+
                                 const clonedStreamWithoutAudio = this.localStream.clone();
                                 clonedStreamWithoutAudio.getAudioTracks().forEach(t => {
                                     t.stop();
                                 })
-    
+
                                 this.handlers.onLocalStream(null);
                                 setTimeout(() => {
                                     if (this.state !== 'videoCall') return;
@@ -170,6 +182,7 @@ export default class VideoManager {
                     ...this.toolbarData,
                     ringOnCall: e.checked
                 });
+                localStorage.setItem('VideoManager.ringOnCall', JSON.stringify(this.toolbarData.ringOnCall));
                 break;
         }
     }

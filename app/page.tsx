@@ -19,6 +19,7 @@ import { TestReq as TestReq, TestResp as TestResp } from './api/tests/testOfferC
 import { ToolbarData, VideoComp, VideoToolbarComp } from './_lib/video/video-client';
 import VideoManager, { ReceivedCall, VideoHandlers } from './_lib/video/VideoManager';
 import Link from 'next/link';
+import { RegisterReq } from './_lib/user-management-client/user-management-common/register';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
@@ -358,12 +359,9 @@ export default function Home() {
             chatId: chatId
 
         }
-        // apiFetchPost<LoginReq, LoginResp>('/api/login', req)
-
         setServerHint(true);
         fetcher.push<LoginReq, LoginResp>(req)
             .then((loginRes: ApiResp<LoginResp>) => {
-                console.debug('loginRes', loginRes);
                 if (loginRes.type === 'error') {
                     alert('Error on login: ' + loginRes.error);
                     return;
@@ -371,6 +369,8 @@ export default function Home() {
                     alert('Wrong user name or password!');
                     return;
                 } else if (loginRes.type === 'success') {
+                    localStorage.setItem('user', req.user);
+                    localStorage.setItem('passwd', req.passwd);
                     setLoginState({
                         type: 'done',
                         ownUser: loginName,
@@ -443,10 +443,11 @@ export default function Home() {
 
     function onRegister() {
         setServerHint(true);
-        userRegisterFetch({
+        const req: RegisterReq = {
             user: loginName,
             passwd: loginPasswd
-        }).then(resp => {
+        }
+        userRegisterFetch(req).then(resp => {
             switch (resp.type) {
                 case 'error':
                     alert('Registration of new user failed because of error: ' + resp.error);
@@ -456,9 +457,13 @@ export default function Home() {
                     break;
                 case 'success':
                     alert('Registration successful! You can now login with this user and password.')
+                    localStorage.setItem('user', req.user);
+                    localStorage.setItem('passwd', req.passwd);
                     setLoginState({
                         type: 'loggingIn'
                     })
+                    setLoginName(req.user);
+                    setLoginPasswd(req.passwd);
                     break;
             }
         }).finally(() => {
@@ -642,6 +647,14 @@ export default function Home() {
         setLoginState({
             type: 'loggingIn'
         })
+        let s = localStorage.getItem('user');
+        if (s != null) {
+            setLoginName(s);
+        }
+        s = localStorage.getItem('passwd');
+        if (s != null) {
+            setLoginPasswd(s);
+        }
     }
 
     return (
