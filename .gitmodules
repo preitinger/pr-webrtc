@@ -4,3 +4,6 @@
 [submodule "app/_lib/user-management-server"]
 	path = app/_lib/user-management-server
 	url = https://github.com/preitinger/user-management-server.git
+[submodule "app/_lib/pr-push-api-common"]
+	path = app/_lib/pr-push-api-common
+	url = https://github.com/preitinger/pr-push-api-common.git
