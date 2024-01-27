@@ -7,3 +7,9 @@
 [submodule "app/_lib/pr-push-api-common"]
 	path = app/_lib/pr-push-api-common
 	url = https://github.com/preitinger/pr-push-api-common.git
+[submodule "app/_lib/pr-push-api-client"]
+	path = app/_lib/pr-push-api-client
+	url = https://github.com/preitinger/pr-push-api-client.git
+[submodule "app/_lib/pr-push-api-server"]
+	path = app/_lib/pr-push-api-server
+	url = https://github.com/preitinger/pr-push-api-server.git
