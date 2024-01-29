@@ -11,8 +11,6 @@ if (!vapidKeysStr) {
     throw new Error('Invalid/Missing environment variable: "VAPID_KEYS"');
 }
 
-console.log('found VAPID_KEY IN ENV', vapidKeysStr);
-
 const vapidKeys = JSON.parse(vapidKeysStr);
 
 webpush.setVapidDetails(
