@@ -695,7 +695,10 @@ export default function Home() {
                             <div className={styles.imgAttribute}><a href="https://www.freepik.com/free-vector/video-conferencing-concept-landing-page_5155828.htm#query=video%20call&position=13&from_view=search&track=ais&uuid=d88bd399-7c39-4f67-8c62-d2715f65f654">Image by pikisuperstar</a> on Freepik</div>
 
                             <p>
-                                {"This is mainly for demonstration and my personal usage. So, registration is without the necessity to provide any personal data. Not even an email address is required. Just, choose a user name and a password. That's it. (At least as long as the usage is within reasonable borders... ;-)"}
+                                This is mainly for demonstration and my personal usage. So, registration is without the necessity 
+                                to provide any personal data. Not even an email address is required. 
+                                Just, choose a user name and a password. {'That\'s'} it. (At least as long as the usage is within
+                                reasonable borders... ;-)
                             </p>
                             <div className={styles.buttonRow}>
                                 {/* <Link className={styles.register} href='/register'>Register now</Link>
