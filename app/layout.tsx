@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'pr-webRTC',
   description: 'Simpler Chat und Internet-Videoanrufe',
+  manifest: "/manifestx.json", // we are accessing our manifest file here
 }
 
 export default function RootLayout({

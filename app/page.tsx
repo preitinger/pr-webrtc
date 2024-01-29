@@ -105,6 +105,7 @@ export default function Home() {
     const [remoteMediaStream, setRemoteMediaStream] = useState<MediaStream | null>(null);
     const [testCaller, setTestCaller] = useState<string>('');
     const [testCallee, setTestCallee] = useState<string>('');
+    const [waitingForPush, setWaitingForPush] = useState<boolean>(false);
 
     const loginInputRef = useRef<HTMLInputElement | null>(null);
     const chatLinesRef = useRef<HTMLDivElement | null>(null);
@@ -120,6 +121,8 @@ export default function Home() {
         peerConnection: null
     })
     const accumulatedFetcher = useRef<AccumulatedFetcher | null>(null);
+    const executeRequestInterrupted = useRef<boolean>(false);
+    const waitingForPushRef = useRef<boolean>(false);
 
     useEffect(() => {
         if (typeof (window) !== undefined) {
@@ -230,7 +233,7 @@ export default function Home() {
     function onDlgCancel() {
         switch (loginState.type) {
             case 'loggingIn':
-                // no break
+            // no break
             case 'registering':
                 setLoginState({
                     type: 'welcome'
@@ -261,6 +264,10 @@ export default function Home() {
     function executeRequest() {
         if (ownUserRef.current == null) return;
         if (sessionTokenRef.current == null) throw new Error('session token null');
+        if (waitingForPushRef.current) {
+            executeRequestInterrupted.current = true;
+            return;
+        }
         const req: ChatReq = {
             type: 'chat',
             chatId: chatId,
@@ -414,6 +421,18 @@ export default function Home() {
                             },
                             onError: (error: string) => {
                                 pushErrorLine(error);
+                            },
+                            onPauseEnded: () => {
+                                setWaitingForPush(false);
+                                waitingForPushRef.current = false;
+                                if (executeRequestInterrupted.current) {
+                                    executeRequestInterrupted.current = false;
+                                    executeRequest();
+                                }
+                            },
+                            onWaitForPush: () => {
+                                setWaitingForPush(true);
+                                waitingForPushRef.current = true;
                             }
                         };
 
@@ -663,7 +682,7 @@ export default function Home() {
                 {
                     loginState.type === 'done' &&
                     <div>
-                    <button className={`${styles.redButton} ${styles.logout}`} onClick={onLogout}>Logout</button>
+                        <button className={`${styles.redButton} ${styles.logout}`} onClick={onLogout}>Logout</button>
                     </div>
                 }
 
@@ -830,9 +849,9 @@ export default function Home() {
                         {
                             videoCall &&
                             <div>
-                            <VideoComp showConnecting={false} key='localMedia' mediaStream={localMediaStream} />
-                            <VideoComp showConnecting={true} key='remoteMedia' mediaStream={remoteMediaStream} />
-                        </div>
+                                <VideoComp showConnecting={false} key='localMedia' mediaStream={localMediaStream} />
+                                <VideoComp showConnecting={true} key='remoteMedia' mediaStream={remoteMediaStream} />
+                            </div>
                         }
                     </div>
                 </div>
@@ -888,6 +907,22 @@ export default function Home() {
                     <button onClick={() => {
                         setConnectionErrorConfirmed(true);
                     }}>OK</button>
+                </ModalDialog>
+            }
+            {
+                waitingForPush &&
+                <ModalDialog key='waitForPushDlg'>
+                    <h2>Waiting for a call ...</h2>
+                    <p>
+                        The application is now waiting for a call. Meanwhile no bandwidth will be wasted by further polling for chat or call messages.
+                        You will be notified by a push message on a call.
+                        When you want to chat or make a call before this happens, click the following button to stop the waiting mode.
+                    </p>
+                    <button onClick={
+                        () => {
+                            videoManagerRef.current?.setPaused(false);
+                        }
+                    }>Stop waiting</button>
                 </ModalDialog>
             }
         </>

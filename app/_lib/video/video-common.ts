@@ -106,6 +106,23 @@ export type WebRTCMsgResp = {
     type: 'closed';
 }
 
+export interface SavePushSubscriptionReq {
+    type: 'savePushSubscription';
+    stringifiedPushSubscription: string;
+}
+
+export type SavePushSubscriptionResp = {
+    type: 'success';
+}
+
+export interface DeletePushSubscriptionReq {
+    type: 'deletePushSubscription';
+}
+
+export type DeletePushSubscriptionResp = {
+    type: 'success';
+}
+
 export type AuthenticatedVideoReq<Req> = {
     type: 'authenticatedVideoReq';
     ownUser: string;

@@ -1,6 +1,7 @@
+import { pushApiStart } from "../pr-push-api-client/pr-push-api-client";
 import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
 import { ToolbarData, ToolbarDataPart, VideoToolbarEvent } from "./video-client";
-import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
+import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, DeletePushSubscriptionReq, DeletePushSubscriptionResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, SavePushSubscriptionReq, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
 
 export interface ReceivedCall {
     caller: string;
@@ -25,6 +26,8 @@ export interface VideoHandlers {
     onRemoteStream: (stream: MediaStream | null) => void;
     onHint: (hint: string, alert?: boolean) => void;
     onError: (error: string) => void;
+    onPauseEnded: () => void;
+    onWaitForPush: () => void;
 }
 
 // const mediaConstraints = {
@@ -58,6 +61,45 @@ export default class VideoManager {
 
         this.handlers.onToolbarData(this.toolbarData);
         this.sendCheckCall();
+    }
+
+    setPaused(pause: boolean) {
+
+        // pause will be reset either on setPaused(false) or when a pending fetch for checkCall responds with 'newOffer'
+
+        switch (this.state) {
+            case 'checkingCall':
+                this.paused = pause;
+                if (!this.paused) {
+                    if (this.sendingInterrupted) {
+                        this.sendingInterrupted = false;
+                        this.sendCheckCall();
+                    }
+                    {
+                        const req: DeletePushSubscriptionReq = {
+                            type: 'deletePushSubscription'
+                        }
+                        this.sendReq<DeletePushSubscriptionReq, DeletePushSubscriptionResp>(req).finally(() => {
+                            this.pushSubscription?.unsubscribe();
+                            this.pushSubscription = null;
+                        })
+                    }
+                    this.handlers.onPauseEnded();
+                }
+                break;
+            default:
+                // ignore
+                break;
+
+            case 'answeringCall':
+            case 'sendingAccept':
+            case 'sendingReject':
+            case 'sendingOffer':
+            case 'checkingAccept':
+            case 'videoCall':
+            case 'closed':
+            case 'error':
+        }
     }
 
     close() {
@@ -184,6 +226,27 @@ export default class VideoManager {
                 });
                 localStorage.setItem('VideoManager.ringOnCall', JSON.stringify(this.toolbarData.ringOnCall));
                 break;
+
+            case 'pushOnCall':
+                pushApiStart('/sw.js',
+                    "BPz5hyoDeI73Jgu6-rxgQmz2-WMQnDh4vMGszZO8-fBWPo0UV9yJsWYScxJqRMJpxAS1WxnvDoescRPeaPM6VGs",
+                    () => this.setPaused(false)
+                ).then(subscr => {
+                    const req: SavePushSubscriptionReq = {
+                        type: 'savePushSubscription',
+                        stringifiedPushSubscription: JSON.stringify(subscr)
+                    }
+                    this.pushSubscription = subscr;
+                    this.sendReq(req).then(resp => {
+                        this.handlers.onWaitForPush();
+                        this.setPaused(true);
+                    }).catch(reason => {
+                        console.error('caught in savePushSubscription', reason);
+                    })
+                }).catch(reason => {
+                    console.error('caught', reason);
+                });
+                break;
         }
     }
 
@@ -234,7 +297,7 @@ export default class VideoManager {
         if (this.caller != null && this.callee != null) {
             if (this.caller == null) throw new Error('caller null before hangUp?!');
             if (this.callee == null) throw new Error('callee null before hangUp?!');
-            this.pushReq<HangUpReq, HangUpResp>({
+            this.sendReq<HangUpReq, HangUpResp>({
                 type: 'hangUp',
                 caller: this.caller,
                 callee: this.callee
@@ -276,7 +339,7 @@ export default class VideoManager {
                 caller: this.caller ?? '',
                 connecting: true
             });
-            this.pushReq<AcceptCallReq, AcceptCallResp>({
+            this.sendReq<AcceptCallReq, AcceptCallResp>({
                 type: 'acceptCall',
                 caller: this.receivedCall.caller,
                 callee: this.ownUser
@@ -312,7 +375,7 @@ export default class VideoManager {
             this.state = 'sendingReject';
             this.fireUpdatedToolbarData({ type: 'idle' });
             // Earlier deprecated RejectCallReq
-            this.pushReq<HangUpReq, HangUpResp>({
+            this.sendReq<HangUpReq, HangUpResp>({
                 type: 'hangUp',
                 caller: this.receivedCall.caller,
                 callee: this.ownUser
@@ -452,7 +515,7 @@ export default class VideoManager {
             caller: this.caller,
             callee: this.callee
         }
-        this.pushReq<OfferCallReq, OfferCallResp>(req).then(resp => {
+        this.sendReq<OfferCallReq, OfferCallResp>(req).then(resp => {
             if (this.state !== 'sendingOffer') return;
             switch (resp.type) {
                 case 'authFailed':
@@ -483,7 +546,7 @@ export default class VideoManager {
 
         this.clearMyTimeout();
 
-        this.pushReq<WebRTCMsgReq, WebRTCMsgResp>(
+        this.sendReq<WebRTCMsgReq, WebRTCMsgResp>(
             {
                 type: 'webRTCMsg',
                 caller: this.caller,
@@ -569,12 +632,21 @@ export default class VideoManager {
         }
     }
 
+    /**
+     * sends a CheckCallReq if not paused.
+     * If paused, the flag sendingInterrupted is set to true.
+     */
     private sendCheckCall() {
+        if (this.paused) {
+            this.sendingInterrupted = true;
+            return;
+        }
         const req: CheckCallReq = {
             type: 'checkCall',
             callee: this.ownUser
         };
-        this.pushReq<CheckCallReq, CheckCallResp>(req).then(resp => {
+
+        this.sendReq<CheckCallReq, CheckCallResp>(req).then(resp => {
             if (this.state !== 'checkingCall') return;
 
             switch (resp.type) {
@@ -600,7 +672,7 @@ export default class VideoManager {
                     if (resp.caller === this.ownUser) {
                         // was a dummy entry just existing to prevent a call to the own user while he was calling sb before loging out
                         // so just remove this callee entry by sending a hangUp
-                        this.pushReq<HangUpReq, HangUpResp>({
+                        this.sendReq<HangUpReq, HangUpResp>({
                             type: 'hangUp',
                             caller: this.ownUser,
                             callee: this.ownUser
@@ -649,7 +721,7 @@ export default class VideoManager {
             caller: this.caller,
             callee: this.callee
         }
-        this.pushReq<CheckAcceptReq, CheckAcceptResp>(req).then(resp => {
+        this.sendReq<CheckAcceptReq, CheckAcceptResp>(req).then(resp => {
             if (this.state !== 'checkingAccept') return;
 
             switch (resp.type) {
@@ -672,7 +744,7 @@ export default class VideoManager {
         })
     }
 
-    private pushReq<Req extends { type: string }, Resp>(req: Req) {
+    private sendReq<Req extends { type: string }, Resp>(req: Req) {
         return this.fetcher.push<AuthenticatedVideoReq<Req>, Resp>(this.authenticatedReq<Req>(req))
     }
 
@@ -704,4 +776,7 @@ export default class VideoManager {
     private toolbarData: ToolbarData = { type: 'idle', ringOnCall: false, camera: true };
     private audioSenders: RTCRtpSender[] = [];
     private videoSenders: RTCRtpSender[] = [];
+    private paused: boolean = false;
+    private sendingInterrupted: boolean = false;
+    private pushSubscription: PushSubscription | null = null;
 }

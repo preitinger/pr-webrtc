@@ -4,6 +4,9 @@ import styles from './video-client.module.css'
 import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
 import { AuthenticatedVideoReq, CheckCallReq, CheckCallResp } from "./video-common";
 import { ReceivedCall } from "./VideoManager";
+import Image from "next/image";
+import ModalDialog from "@/components/ModalDialog";
+import EscapableFlexComp from "@/components/EscapableFlexComp";
 
 export interface VideoProps {
     mediaStream: MediaStream | null;
@@ -61,6 +64,8 @@ export type VideoToolbarEvent = {
 } | {
     type: 'ringOnCall';
     checked: boolean
+} | {
+    type: 'pushOnCall';
 }
 
 export interface VideoToolbarProps {
@@ -71,6 +76,8 @@ export interface VideoToolbarProps {
 
 export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
 
+    const [pushDlg, setPushDlg] = useState<boolean>(false);
+
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
@@ -79,35 +86,55 @@ export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
         }
     }, [data.type, data.ringOnCall])
 
+    function onPushDlgCancel() {
+        setPushDlg(false);
+        // TODO ?
+    }
+
+    function onPushDlgOk() {
+        setPushDlg(false);
+        onEvent({
+            type: 'pushOnCall'
+        })
+    }
+
 
     return (
         <div className={styles.toolbar}>
             {
-                <table>
-                    <tbody>
-                        <tr>
-                            <td><label htmlFor='camera'>Use camera</label></td>
-                            <td>
-                                <input id='camera' type='checkbox' checked={data.camera} onChange={(e) => onEvent({
-                                    type: 'camera',
-                                    checked: e.target.checked
-                                })} />
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <label htmlFor='ringOnCall'>Ring on incoming call</label>
-                            </td>
-                            <td>
-                                <input id='ringOnCall' type='checkbox' checked={data.ringOnCall} onChange={(e) => onEvent({
-                                    type: 'ringOnCall',
-                                    checked: e.target.checked
-                                })} />
-                            </td>
+                <>
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td><label htmlFor='camera'>Use camera</label></td>
+                                <td>
+                                    <input id='camera' type='checkbox' checked={data.camera} onChange={(e) => onEvent({
+                                        type: 'camera',
+                                        checked: e.target.checked
+                                    })} />
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <label htmlFor='ringOnCall'>Ring on incoming call</label>
+                                </td>
+                                <td>
+                                    <input id='ringOnCall' type='checkbox' checked={data.ringOnCall} onChange={(e) => onEvent({
+                                        type: 'ringOnCall',
+                                        checked: e.target.checked
+                                    })} />
+                                </td>
 
-                        </tr>
-                    </tbody>
-                </table>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {data.type === 'idle' && <button onClick={() => {
+                        setPushDlg(true);
+                    }}>Push me on call ...</button>}
+                    {/* <button type="button" className={styles.ellipsis} onClick={() => {
+                        alert('Later here more options ;-)')
+                    }}><Image src={'/ellipsis-vertical.svg'} alt='More options ...' width={64} height={64} /></button> */}
+                </>
             }
             {
                 data.type === 'receivedCall' && data.receivedCall != null &&
@@ -147,6 +174,18 @@ export function VideoToolbarComp({ data, onEvent }: VideoToolbarProps) {
                     audioRef.current?.play();
                 }
             }} />
+
+            { pushDlg && 
+                <ModalDialog>
+                    <EscapableFlexComp onCancel={onPushDlgCancel}>
+                        <p>
+                            Shall this site pause and send you a push notification on an incoming call?
+                        </p>
+                        <button onClick={onPushDlgOk}>OK</button>
+                        <button onClick={onPushDlgCancel}>Cancel</button>
+                    </EscapableFlexComp>
+                </ModalDialog>
+            }
         </div>
     )
 }

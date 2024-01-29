@@ -1,16 +1,32 @@
 import clientPromise from "../mongodb";
+import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
 import { checkToken } from "../user-management-server/userManagementServer";
-import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
+import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, DeletePushSubscriptionReq, DeletePushSubscriptionResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, SavePushSubscriptionReq, SavePushSubscriptionResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
 
 const dbName = 'video';
 
+/**
+ * scheme for MongoDB entries in collection callees.
+ * If an entry exists for user <_id>, there are the following cases.
+ * a) The user <_id> has set up push notifications. Then, the subscription is stored stringified in <stringifiedSubscription>.
+ *    Otherwise, <stringifiedSubscription> is null.
+ * b) User <caller> has offered a call to user <_id>. Then caller is not null. Otherwise, if nobody has offered a call,
+ *    <caller> is null.
+ * c) a) + b) that means a call has been offered almost at the same time as user <_id>, the callee, has subscribed
+ *    for push notifications.
+ */
 export interface Callee {
     _id: string;
-    caller: string;
+    /**
+     * if not null, <caller> has offered a call to <_id>
+     * 
+     */
+    caller: string | null;
     accepted: boolean;
     messagesForCallee: string[];
     messagesForCaller: string[];
+    stringifiedSubscription: string | null;
 }
 
 export async function offerCall(validatedUser: string, o: OfferCallReq): Promise<ApiResp<OfferCallResp>> {
@@ -24,18 +40,30 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
     const calleesCol = db.collection<Callee>('callees');
 
     try {
-        await calleesCol.updateOne({
+        const res = await calleesCol.findOneAndUpdate({
             _id: o.callee,
-            caller: o.caller
+            caller: null
         }, {
             $set: {
+                caller: o.caller,
                 accepted: false,
                 messagesForCallee: [],
                 messagesForCaller: []
+            }, $setOnInsert: {
+                stringifiedSubscription: null
             }
         }, {
             upsert: true
-        })
+        });
+
+        if (res != null && res.stringifiedSubscription != null) {
+            const subscription = JSON.parse(res.stringifiedSubscription);
+            try {
+                const sendRes = await sendPushMessage(subscription, `Call from ${o.caller}`);
+            } catch (reason) {
+                console.warn('sendPushMessage failed: ', reason);
+            }
+        }
 
     } catch (reason: any) {
         if (reason.code === 11000) {
@@ -58,7 +86,8 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
                 caller: o.caller,
                 accepted: false,
                 messagesForCallee: [],
-                messagesForCaller: []
+                messagesForCaller: [],
+                stringifiedSubscription: null
             }
         }, {
             upsert: true
@@ -101,7 +130,7 @@ export async function checkCall(validatedUser: string, r: CheckCallReq): Promise
         }
     });
 
-    if (res == null) {
+    if (res == null || res.caller == null) {
         return ({
             type: 'noNewOffer'
         })
@@ -240,11 +269,11 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
             _id: req.callee,
             caller: req.caller
         })
-    
+
         if (!res.acknowledged) {
             console.error('deleteOne for callee in hangUp not acknowledged');
         }
-    
+
     } catch (reason) {
         console.error('Exception in 1. delete in hangUp', reason);
     }
@@ -257,7 +286,7 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
         if (!res.acknowledged) {
             console.error('deleteOne for caller\'s dummy in hangUp not acknowledged');
         }
-    } catch(reason) {
+    } catch (reason) {
         console.error('Exception in 2. delete in hangUp', reason);
     }
 
@@ -268,6 +297,8 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
         type: 'success'
     }
 }
+
+
 
 export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promise<ApiResp<WebRTCMsgResp>> {
     const client = await clientPromise;
@@ -340,8 +371,61 @@ export async function webRTCMsg(validatedUser: string, req: WebRTCMsgReq): Promi
     }
 }
 
+export async function savePushSubscription(validatedUser: string, req: SavePushSubscriptionReq): Promise<ApiResp<SavePushSubscriptionResp>> {
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const calleesCol = db.collection<Callee>('callees');
 
-export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | OfferCallReq | CheckAcceptReq | HangUpReq | WebRTCMsgReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | OfferCallResp | CheckAcceptResp | HangUpResp | WebRTCMsgResp>> {
+    const res = await calleesCol.updateOne({
+        _id: validatedUser
+    }, {
+        $set: {
+            stringifiedSubscription: req.stringifiedPushSubscription
+        },
+        $setOnInsert: {
+            accepted: false,
+            caller: null,
+            messagesForCallee: [],
+            messagesForCaller: [],
+        }
+    }, {
+        upsert: true
+    });
+
+    if (!res.acknowledged) return {
+        type: 'error',
+        error: 'update not acknowledged'
+    }
+
+    return {
+        type: 'success'
+    };
+
+}
+
+export async function deletePushSubscription(validatedUser: string, req: DeletePushSubscriptionReq): Promise<ApiResp<DeletePushSubscriptionResp>> {
+    const client = await clientPromise;
+    const db = client.db(dbName);
+    const calleesCol = db.collection<Callee>('callees');
+
+    const res = await calleesCol.updateOne({
+        _id: validatedUser
+    }, {
+        $set: {
+            stringifiedSubscription: null
+        }
+    })
+    if (!res.acknowledged) return {
+        type: 'error',
+        error: 'update not acknowledged'
+    }
+
+    return {
+        type: 'success'
+    }
+}
+
+export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<CheckCallReq | AcceptCallReq | OfferCallReq | CheckAcceptReq | HangUpReq | WebRTCMsgReq | SavePushSubscriptionReq | DeletePushSubscriptionReq>): Promise<ApiResp<CheckCallResp | AcceptCallResp | OfferCallResp | CheckAcceptResp | HangUpResp | WebRTCMsgResp | SavePushSubscriptionResp | DeletePushSubscriptionResp>> {
     if (!checkToken(req.ownUser, req.sessionToken)) {
         return {
             type: 'error',
@@ -363,6 +447,11 @@ export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<Ch
             return hangUp(req.ownUser, req.req);
         case 'webRTCMsg':
             return webRTCMsg(req.ownUser, req.req);
+        case 'savePushSubscription':
+            return savePushSubscription(req.ownUser, req.req);
+        case 'deletePushSubscription':
+            return deletePushSubscription(req.ownUser, req.req);
+            break;
         // default: throw new Error(`Not yet implemented: ${req.req.type}`);
     }
 }

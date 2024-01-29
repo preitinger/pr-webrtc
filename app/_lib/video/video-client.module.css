@@ -46,3 +46,9 @@
 .connecting {
     color: red;
 }
+.ellipsis {
+    /* background-image: url('/ellipsis-vertical.svg'); */
+    /* width: 64px; */
+    /* height: 64px; */
+    padding: 0;
+}
