@@ -11,7 +11,7 @@
 
 
 
-console.log('sw.js started [5]');
+console.log('sw.js started [6]');
 
 self.addEventListener("activate", (event) => {
     event.waitUntil(clients.claim());
@@ -51,3 +51,4 @@ self.addEventListener('push', e => {
     // console.log('waitUntil called');
 
 })
+
