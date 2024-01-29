@@ -862,7 +862,7 @@ export default function Home() {
             {
                 serverHint &&
                 <ModalDialog key='loginDlg'>
-                    <p>Concacting server ...</p>
+                    <p>Contacting server ...</p>
                 </ModalDialog>
             }
             {
