@@ -17,6 +17,7 @@ export async function executeLogin(req: LoginReq): Promise<ApiResp<LoginResp>> {
     // - insert "UserEntered" event to the events collection
     // - return the new user list and the according nextEventId as response
 
+    console.log('executeLogin: req', req);
     const userManagementLoginResp: UserManagementLoginResp = await executeUserManagementLogin({
         user: req.user,
         passwd: req.passwd

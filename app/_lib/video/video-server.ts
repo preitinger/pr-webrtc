@@ -59,7 +59,7 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
         if (res != null && res.stringifiedSubscription != null) {
             const subscription = JSON.parse(res.stringifiedSubscription);
             try {
-                const sendRes = await sendPushMessage(subscription, `Call from ${o.caller}`);
+                const sendRes = await sendPushMessage(subscription, {caller: o.caller});
             } catch (reason) {
                 console.warn('sendPushMessage failed: ', reason);
             }
@@ -264,14 +264,32 @@ export async function hangUp(validatedUser: string, req: HangUpReq): Promise<Api
     const db = client.db(dbName);
     const calleesCol = db.collection<Callee>('callees');
 
+    // Not delete if stringifiedSubscription contained
+
     try {
         const res = await calleesCol.deleteOne({
             _id: req.callee,
-            caller: req.caller
+            caller: req.caller,
+            stringifiedSubscription: null
         })
 
         if (!res.acknowledged) {
             console.error('deleteOne for callee in hangUp not acknowledged');
+        } else if (res.deletedCount === 0) {
+            const updateRes = await calleesCol.updateOne({
+                _id: req.callee,
+                caller: req.caller,
+            }, {
+                $set: {
+                    caller: null
+                }
+            });
+            if (!updateRes.acknowledged) {
+                console.error('updateOne for callee in hangup not acknowledged');
+            }
+            if (updateRes.matchedCount !== 1) {
+                throw new Error("update for callee in hangup did not match " + updateRes.matchedCount);
+            }
         }
 
     } catch (reason) {

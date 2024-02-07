@@ -1,7 +1,7 @@
-import clientPromise from "@/app/_lib/mongodb";
 import { SendTestMsgReq, SendTestMsgResp } from "@/app/_lib/testPushAPI";
 import { SubscriptionDoc } from "@/app/_lib/testPushAPI-server";
 import { apiPOST } from "@/app/_lib/user-management-server/apiRoutesForServer";
+import clientPromise from "@/app/_lib/user-management-server/mongodb";
 import { ApiResp } from "@/app/_lib/user-management-server/user-management-common/apiRoutesCommon";
 import { NextRequest } from "next/server";
 import webpush from "web-push";

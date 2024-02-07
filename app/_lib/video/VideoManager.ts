@@ -64,6 +64,7 @@ export default class VideoManager {
     }
 
     setPaused(pause: boolean) {
+        console.log('setPaused: pause=', pause);
 
         // pause will be reset either on setPaused(false) or when a pending fetch for checkCall responds with 'newOffer'
 
@@ -79,6 +80,7 @@ export default class VideoManager {
                         const req: DeletePushSubscriptionReq = {
                             type: 'deletePushSubscription'
                         }
+                        console.log('sending DeletePushSubscriptionReq')
                         this.sendReq<DeletePushSubscriptionReq, DeletePushSubscriptionResp>(req).finally(() => {
                             this.pushSubscription?.unsubscribe();
                             this.pushSubscription = null;
@@ -228,24 +230,26 @@ export default class VideoManager {
                 break;
 
             case 'pushOnCall':
-                pushApiStart('/sw.js',
-                    "BPz5hyoDeI73Jgu6-rxgQmz2-WMQnDh4vMGszZO8-fBWPo0UV9yJsWYScxJqRMJpxAS1WxnvDoescRPeaPM6VGs",
-                    () => this.setPaused(false)
-                ).then(subscr => {
-                    const req: SavePushSubscriptionReq = {
-                        type: 'savePushSubscription',
-                        stringifiedPushSubscription: JSON.stringify(subscr)
-                    }
-                    this.pushSubscription = subscr;
-                    this.sendReq(req).then(resp => {
-                        this.handlers.onWaitForPush();
-                        this.setPaused(true);
-                    }).catch(reason => {
-                        console.error('caught in savePushSubscription', reason);
-                    })
-                }).catch(reason => {
-                    console.error('caught', reason);
-                });
+                // TODO differently with now 'next-pwa' being installed
+                // pushApiStart('/sw.js',
+                //     "BPz5hyoDeI73Jgu6-rxgQmz2-WMQnDh4vMGszZO8-fBWPo0UV9yJsWYScxJqRMJpxAS1WxnvDoescRPeaPM6VGs",
+                //     () => this.setPaused(false)
+                // ).then(subscr => {
+                //     const req: SavePushSubscriptionReq = {
+                //         type: 'savePushSubscription',
+                //         stringifiedPushSubscription: JSON.stringify(subscr)
+                //     }
+                //     this.pushSubscription = subscr;
+                //     this.sendReq(req).then(resp => {
+                //         this.handlers.onWaitForPush();
+                //         this.setPaused(true);
+                //     }).catch(reason => {
+                //         console.error('caught in savePushSubscription', reason);
+                //     })
+                // }).catch(reason => {
+                //     console.error('caught', reason);
+                // });
+                alert('nyi');
                 break;
         }
     }

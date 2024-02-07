@@ -1,0 +1,48 @@
+.hint {
+    color: gray;
+
+}
+
+.redButton, .greenButton {
+    color: white;
+    height: 60px;
+    width: 200px;
+    font-size: large;
+    margin: 0.5rem;
+    border-radius: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-decoration: none;
+}
+
+.redButton:hover, .redButton:focus, .greenButton:hover, .greenButton:focus {
+    font-size: larger;
+}
+
+.redButton {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(358, 87%, 30%) 100%);
+}
+
+.redButton:hover, .redButton:focus {
+    background: rgb(73, 72, 72);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(358, 87%, 40%) 100%);
+}
+
+.greenButton {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(92, 95%, 30%) 100%);
+}
+
+.greenButton:hover, .greenButton:focus {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(92, 95%, 40%) 100%);
+}
+
+.buttonRow {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: space-between;
+    align-items: center;
+}

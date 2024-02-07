@@ -1,10 +1,10 @@
 import { Collection, Condition, Db, FindCursor, WithId } from "mongodb";
 import { ChatEvent, ChatReq, ChatResp } from "./chat-common";
 import { transformPasswd } from "../hash";
-import clientPromise from "../mongodb";
 import { EventDoc, ChatDoc, UserOnline } from "./chat-server";
 import { ApiResp } from "../user-management-client/user-management-common/apiRoutesCommon";
 import { checkToken, executeLogin } from "../user-management-server/userManagementServer";
+import clientPromise from "../user-management-server/mongodb";
 
 //////////////////////////////////////////////////////////// mit class?
 class ChatsCol {
@@ -245,7 +245,7 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
                     $gt: req.lastEventId
                 }
             })
-    ).toArray();
+    ).limit(100).toArray();
 
     // console.log('req.lastEventId', req.lastEventId);
     // console.log('found events', events);

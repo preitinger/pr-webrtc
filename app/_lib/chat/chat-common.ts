@@ -8,7 +8,7 @@ export type ChatReq = {
     user: string;
     token: string;
     msg: string | null;
-    lastEventId: number | null;
+    lastEventId: number;
 }
 
 export type ChatEvent = {
@@ -26,7 +26,7 @@ export type ChatEvent = {
 export type ChatResp = {
     type: 'success';
     events: ChatEvent[];
-    lastEventId: number | null;
+    lastEventId: number;
 } | {
     type: 'authenticationFailed';
 }

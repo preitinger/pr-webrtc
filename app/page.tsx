@@ -11,7 +11,7 @@ import { AccumulatedFetcher, ConnectionHandler, apiFetchPost } from './_lib/user
 import { ApiResp } from './_lib/user-management-client/user-management-common/apiRoutesCommon';
 import { LogoutReq, LogoutResp } from './_lib/chat/logout-common';
 import { userRegisterFetch } from './_lib/user-management-client/userManagementClient';
-import { ChatLine, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
+import { ChatHandlers, ChatLine, ChatManager, ChatPanelComp, ChatUserListComp } from './_lib/chat/chat-client';
 // import { VideoComp } from './_lib/video/video-client';
 import { RTCRef, openPeerConnection } from './_lib/myWebRTC/myWebRTC-client';
 import { CheckCallReq, OfferCallReq, OfferCallResp, RejectCallReq } from "./_lib/video/video-common";
@@ -20,6 +20,7 @@ import { ToolbarData, VideoComp, VideoToolbarComp } from './_lib/video/video-cli
 import VideoManager, { ReceivedCall, VideoHandlers } from './_lib/video/VideoManager';
 import Link from 'next/link';
 import { RegisterReq } from './_lib/user-management-client/user-management-common/register';
+import { useRouter } from 'next/navigation';
 
 const timeoutMs = 2000;
 // const timeoutMs = 200000;
@@ -50,16 +51,16 @@ interface UserListState {
 
 }
 
-/**
- * see diagram WebRTC Demo.vpp://diagram/ZxwrFzGD.AACAQpi
- */
-type RequestState =
-    'logging in' |
-    'fetching' |
-    'pending' |
-    'sending' |
-    'waiting for timeout' |
-    'waiting on error'
+// /**
+//  * see diagram WebRTC Demo.vpp://diagram/ZxwrFzGD.AACAQpi
+//  */
+// type RequestState =
+//     'logging in' |
+//     'fetching' |
+//     'pending' |
+//     'sending' |
+//     'waiting for timeout' |
+//     'waiting on error'
 
 function exampleLines() {
     const lines: ChatLine[] = [];
@@ -110,10 +111,10 @@ export default function Home() {
     const loginInputRef = useRef<HTMLInputElement | null>(null);
     const chatLinesRef = useRef<HTMLDivElement | null>(null);
     const chatInputRef = useRef<HTMLInputElement | null>(null);
-    const lastEventIdRef = useRef<number | null>(-1);
-    const timeout = useRef<NodeJS.Timeout | null>(null);
-    const lineToSendRef = useRef<string | null>(null);
-    const requestStateRef = useRef<RequestState>('logging in');
+    // const lastEventIdRef = useRef<number>(-1);
+    // const timeout = useRef<NodeJS.Timeout | null>(null);
+    // const lineToSendRef = useRef<string | null>(null);
+    // const requestStateRef = useRef<RequestState>('logging in');
     const ownUserRef = useRef<string | null>(null);
     const sessionTokenRef = useRef<string | null>(null);
     const eventIdForUsers = useRef<number>(-1);
@@ -121,7 +122,7 @@ export default function Home() {
         peerConnection: null
     })
     const accumulatedFetcher = useRef<AccumulatedFetcher | null>(null);
-    const executeRequestInterrupted = useRef<boolean>(false);
+    // const executeRequestInterrupted = useRef<boolean>(false);
     const waitingForPushRef = useRef<boolean>(false);
 
     useEffect(() => {
@@ -242,222 +243,424 @@ export default function Home() {
         }
     }
 
-    function onTimeout() {
-        if (ownUserRef.current == null) throw new Error('ownUser null in onTimeout');
-        switch (requestStateRef.current) {
-            case 'waiting for timeout':
-                executeRequest();
-                break;
-            case 'waiting on error':
-                if (lineToSendRef.current == null) {
-                    setChatInputFrozen(false);
-                    executeRequest();
-                } else {
-                    executeRequest();
-                }
-                break;
-            default:
-                break;
-        }
-    }
+    // TODO die ganzen seiteneffekte am besten mal aufraeumen was die ganze chat funktionen angeht:
 
-    function executeRequest() {
-        if (ownUserRef.current == null) return;
-        if (sessionTokenRef.current == null) throw new Error('session token null');
-        if (waitingForPushRef.current) {
-            executeRequestInterrupted.current = true;
-            return;
-        }
-        const req: ChatReq = {
-            type: 'chat',
-            chatId: chatId,
-            user: ownUserRef.current,
-            token: sessionTokenRef.current,
-            msg: lineToSendRef.current,
-            lastEventId: lastEventIdRef.current,
-        }
-        console.debug('vor myFetchPost: req', req);
-        if (accumulatedFetcher.current == null) throw new Error('accumulatedFetcher null');
-        accumulatedFetcher.current.push<ChatReq, ChatResp>(req).
-        /* apiFetchPost<ChatReq, ChatResp>('/api/chat', req). */then(resp => {
-            if (ownUserRef.current == null) return;
+    // function onTimeout() {
+    //     if (ownUserRef.current == null) throw new Error('ownUser null in onTimeout');
+    //     switch (requestStateRef.current) {
+    //         case 'waiting for timeout':
+    //             executeRequest();
+    //             break;
+    //         case 'waiting on error':
+    //             if (lineToSendRef.current == null) {
+    //                 setChatInputFrozen(false);
+    //                 executeRequest();
+    //             } else {
+    //                 executeRequest();
+    //             }
+    //             break;
+    //         default:
+    //             break;
+    //     }
+    // }
 
-            if (resp.type === 'error') {
-                console.error('Error on server', resp.error);
-                pushErrorLine('Error on server: ' + resp.error);
-                requestStateRef.current = 'waiting on error';
-                setChatInputFrozen(true);
-                setConnectionError(true);
-                setConnectionErrorConfirmed(false);
-                return;
-            } else if (resp.type === 'success') {
-                console.debug('chat resp', resp);
-                processChatLines(resp.events, resp.lastEventId);
-                lastEventIdRef.current = resp.lastEventId;
-                console.debug('last eventId', lastEventIdRef.current);
+    // // TODO begin test
+    // function handleRequestResp(resp: ApiResp<ChatResp>) {
+    //     if (ownUserRef.current == null) return;
 
-                switch (requestStateRef.current) {
-                    case 'fetching':
-                        requestStateRef.current = 'waiting for timeout';
-                        timeout.current = setTimeout(onTimeout, timeoutMs);
-                        break;
-                    case 'pending':
-                        if (ownUserRef.current == null) throw new Error('ownUser null on chat resp in state pending');
-                        executeRequest();
-                        break;
-                    case 'sending':
-                        lineToSendRef.current = null;
-                        setChatInput('');
-                        requestStateRef.current = 'waiting for timeout';
-                        timeout.current = setTimeout(onTimeout, timeoutMs);
-                        setChatInputFrozen(false);
-                        console.debug('unfrozen chat input');
-                        break;
-                    case 'logging in':
-                        return;
-                        break;
-                    default:
-                        throw new Error('Unexpected state on fetch response: ' + requestStateRef.current);
-                }
-            } else if (resp.type === 'authenticationFailed') {
-                alert('Die Session ist abgelaufen. Evtl. hast du dich inzwischen an anderer Stelle eingeloggt?');
-                afterLogoutOrLostSession();
-            } else {
-                throw new Error('impossible state?!');
-            }
+    //     if (resp.type === 'error') {
+    //         console.error('Error on server', resp.error);
+    //         pushErrorLine('Error on server: ' + resp.error);
+    //         requestStateRef.current = 'waiting on error';
+    //         setChatInputFrozen(true);
+    //         setConnectionError(true);
+    //         setConnectionErrorConfirmed(false);
+    //         return;
+    //     } else if (resp.type === 'success') {
+    //         console.debug('chat resp', resp);
+    //         processChatLines(resp.events, resp.lastEventId);
+    //         lastEventIdRef.current = resp.lastEventId;
+    //         console.debug('last eventId', lastEventIdRef.current);
 
-        }).catch(reason => {
-            if (ownUserRef.current == null) return;
-            if (reason instanceof Error) {
-                if (reason.message === 'Failed to fetch') {
-                    pushErrorLine('No connection to the server.')
-                } else {
-                    pushErrorLine(`Unknown server error (${reason.name}): ${reason.message}`)
-                }
-            } else {
-                console.error('Caught in apiFetchPost: Error', reason);
-                pushErrorLine('Caught unknown in apiFetchPost: ' + JSON.stringify(reason));
-            }
-            // alert('Error (on server?)' + JSON.stringify(reason));
-            requestStateRef.current = 'waiting on error';
-            setChatInputFrozen(true);
-            setConnectionError(true);
-            setConnectionErrorConfirmed(false);
-        });
-        if (lineToSendRef.current == null) {
-            requestStateRef.current = 'fetching';
-        } else {
-            requestStateRef.current = 'sending';
-            setChatInputFrozen(true);
-        }
-        console.debug('waehrend myFetchPost', requestStateRef.current);
-    }
+    //         switch (requestStateRef.current) {
+    //             case 'fetching':
+    //                 requestStateRef.current = 'waiting for timeout';
+    //                 timeout.current = setTimeout(onTimeout, timeoutMs);
+    //                 break;
+    //             case 'pending':
+    //                 if (ownUserRef.current == null) throw new Error('ownUser null on chat resp in state pending');
+    //                 executeRequest();
+    //                 break;
+    //             case 'sending':
+    //                 lineToSendRef.current = null;
+    //                 setChatInput('');
+    //                 requestStateRef.current = 'waiting for timeout';
+    //                 timeout.current = setTimeout(onTimeout, timeoutMs);
+    //                 setChatInputFrozen(false);
+    //                 console.debug('unfrozen chat input');
+    //                 break;
+    //             case 'logging in':
+    //                 return;
+    //                 break;
+    //             default:
+    //                 throw new Error('Unexpected state on fetch response: ' + requestStateRef.current);
+    //         }
+    //     } else if (resp.type === 'authenticationFailed') {
+    //         alert('Die Session ist abgelaufen. Evtl. hast du dich inzwischen an anderer Stelle eingeloggt?');
+    //         afterLogoutOrLostSession();
+    //     } else {
+    //         throw new Error('impossible state?!');
+    //     }
 
+    // }
+    // // TODO end test
+
+    // function executeRequest() {
+    //     if (ownUserRef.current == null) return;
+    //     if (sessionTokenRef.current == null) throw new Error('session token null');
+    //     if (waitingForPushRef.current) {
+    //         executeRequestInterrupted.current = true;
+    //         return;
+    //     }
+    //     const req: ChatReq = {
+    //         type: 'chat',
+    //         chatId: chatId,
+    //         user: ownUserRef.current,
+    //         token: sessionTokenRef.current,
+    //         msg: lineToSendRef.current,
+    //         lastEventId: lastEventIdRef.current,
+    //     }
+    //     console.debug('vor myFetchPost: req', req);
+    //     if (accumulatedFetcher.current == null) throw new Error('accumulatedFetcher null');
+    //     accumulatedFetcher.current.push<ChatReq, ChatResp>(req).
+    //     /* apiFetchPost<ChatReq, ChatResp>('/api/chat', req). */then(resp => {
+    //         if (ownUserRef.current == null) return;
+
+    //         if (resp.type === 'error') {
+    //             console.error('Error on server', resp.error);
+    //             pushErrorLine('Error on server: ' + resp.error);
+    //             requestStateRef.current = 'waiting on error';
+    //             setChatInputFrozen(true);
+    //             setConnectionError(true);
+    //             setConnectionErrorConfirmed(false);
+    //             return;
+    //         } else if (resp.type === 'success') {
+    //             console.debug('chat resp', resp);
+    //             processChatLines(resp.events, resp.lastEventId);
+    //             lastEventIdRef.current = resp.lastEventId;
+    //             console.debug('last eventId', lastEventIdRef.current);
+
+    //             switch (requestStateRef.current) {
+    //                 case 'fetching':
+    //                     requestStateRef.current = 'waiting for timeout';
+    //                     timeout.current = setTimeout(onTimeout, timeoutMs);
+    //                     break;
+    //                 case 'pending':
+    //                     if (ownUserRef.current == null) throw new Error('ownUser null on chat resp in state pending');
+    //                     executeRequest();
+    //                     break;
+    //                 case 'sending':
+    //                     lineToSendRef.current = null;
+    //                     setChatInput('');
+    //                     requestStateRef.current = 'waiting for timeout';
+    //                     timeout.current = setTimeout(onTimeout, timeoutMs);
+    //                     setChatInputFrozen(false);
+    //                     console.debug('unfrozen chat input');
+    //                     break;
+    //                 case 'logging in':
+    //                     return;
+    //                     break;
+    //                 default:
+    //                     throw new Error('Unexpected state on fetch response: ' + requestStateRef.current);
+    //             }
+    //         } else if (resp.type === 'authenticationFailed') {
+    //             alert('Die Session ist abgelaufen. Evtl. hast du dich inzwischen an anderer Stelle eingeloggt?');
+    //             afterLogoutOrLostSession();
+    //         } else {
+    //             throw new Error('impossible state?!');
+    //         }
+
+    //     }).catch(reason => {
+    //         if (ownUserRef.current == null) return;
+    //         if (reason instanceof Error) {
+    //             if (reason.message === 'Failed to fetch') {
+    //                 pushErrorLine('No connection to the server.')
+    //             } else {
+    //                 pushErrorLine(`Unknown server error (${reason.name}): ${reason.message}`)
+    //             }
+    //         } else {
+    //             console.error('Caught in apiFetchPost: Error', reason);
+    //             pushErrorLine('Caught unknown in apiFetchPost: ' + JSON.stringify(reason));
+    //         }
+    //         // alert('Error (on server?)' + JSON.stringify(reason));
+    //         requestStateRef.current = 'waiting on error';
+    //         setChatInputFrozen(true);
+    //         setConnectionError(true);
+    //         setConnectionErrorConfirmed(false);
+    //     });
+    //     if (lineToSendRef.current == null) {
+    //         requestStateRef.current = 'fetching';
+    //     } else {
+    //         requestStateRef.current = 'sending';
+    //         setChatInputFrozen(true);
+    //     }
+    //     console.debug('waehrend myFetchPost', requestStateRef.current);
+    // }
+
+    const chatManagerRef = useRef<ChatManager | null>(null);
     const videoManagerRef = useRef<VideoManager | null>(null);
     const [toolbarData, setToolbarData] = useState<ToolbarData | null>(null);
 
-    function onLogin() {
+    const router = useRouter();
+
+    async function sendLogin(user: string, passwd: string): Promise<ApiResp<LoginResp>> {
+
+
         const fetcher = accumulatedFetcher.current;
-        if (fetcher == null) return;
+        if (fetcher == null) throw new Error('fetcher null');;
+
         const req: LoginReq = {
             type: 'login',
-            user: loginName,
-            passwd: loginPasswd,
+            user: user,
+            passwd: passwd,
             chatId: chatId
 
         }
         setServerHint(true);
-        fetcher.push<LoginReq, LoginResp>(req)
-            .then((loginRes: ApiResp<LoginResp>) => {
-                if (loginRes.type === 'error') {
-                    alert('Error on login: ' + loginRes.error);
-                    return;
-                } else if (loginRes.type === 'authenticationFailed') {
-                    alert('Wrong user name or password!');
-                    return;
-                } else if (loginRes.type === 'success') {
-                    localStorage.setItem('user', req.user);
-                    localStorage.setItem('passwd', req.passwd);
-                    setLoginState({
-                        type: 'done',
-                        ownUser: loginName,
-                        sessionToken: loginRes.token
-                    })
-                    ownUserRef.current = loginName;
-                    sessionTokenRef.current = loginRes.token;
-                    eventIdForUsers.current = loginRes.eventIdForUsers;
+        return fetcher.push<LoginReq, LoginResp>(req);
 
-                    setChatLines(d => [
-                        ...d,
-                        {
-                            className: styles.hintLine,
-                            text: `Welcome, ${loginName}!`
-                        }
-                    ])
-                    setScrollDown(true);
-                    console.debug('vor executeRequest', requestStateRef.current);
-                    executeRequest();
-                    console.debug('nach executeRequest', requestStateRef.current);
-                    setChatInputFrozen(false);
-                    {
-                        const handlers: VideoHandlers = {
-                            onToolbarData: (data: ToolbarData | null) => {
-                                setToolbarData(data);
-                            },
-                            onVideoCall: (active: boolean) => {
-                                setVideoCall(active);
-                            },
-                            onLocalStream: (s) => {
-                                setLocalMediaStream(s);
-                            },
-                            onRemoteStream: (s) => {
-                                setRemoteMediaStream(s);
-                            },
-                            onHint: (hint: string, alert?: boolean) => {
-                                pushHintLine(hint);
-                                if (alert) {
-                                    window.alert(hint);
-                                }
-                            },
-                            onError: (error: string) => {
-                                pushErrorLine(error);
-                            },
-                            onPauseEnded: () => {
-                                setWaitingForPush(false);
-                                waitingForPushRef.current = false;
-                                if (executeRequestInterrupted.current) {
-                                    executeRequestInterrupted.current = false;
-                                    executeRequest();
-                                }
-                            },
-                            onWaitForPush: () => {
-                                setWaitingForPush(true);
-                                waitingForPushRef.current = true;
-                            }
-                        };
+    }
 
-                        if (videoManagerRef.current != null) {
-                            videoManagerRef.current.close();
-                        }
-                        videoManagerRef.current = new VideoManager(loginName, loginRes.token, timeoutMs, fetcher, handlers);
-                    }
+    function handleLoginResp(user: string, passwd: string, fetcher: AccumulatedFetcher, loginRes: ApiResp<LoginResp>) {
+        console.log('handleLoginResp', loginRes)
+        if (loginRes.type === 'error') {
+            alert('Error on login: ' + loginRes.error);
+            return;
+        } else if (loginRes.type === 'authenticationFailed') {
+            alert('Wrong user name or password!');
+            return;
+        } else if (loginRes.type === 'success') {
+
+            ownUserRef.current = user;
+            const handlers: ChatHandlers = {
+                onFetchError: (error: string) => {
+                    setConnectionError(true);
+                    setConnectionErrorConfirmed(false);
+                    pushErrorLine(error);
+                }, onFreezeInput: (frozen: boolean) => {
+                    setChatInputFrozen(frozen);
+                }, onResetChatInput: () => {
+                    setChatInput('');
+                }, onChatLines: (events, lastEventId) => {
+                    processChatLines(events, lastEventId)
+                }, onClosed: () => {
+                    afterLogoutOrLostSession();
                 }
+            }
+            chatManagerRef.current = new ChatManager(timeoutMs, chatId, user, loginRes.token, fetcher,
+                handlers);
+            console.log('created chatManager')
+
+            localStorage.setItem('user', user);
+            localStorage.setItem('passwd', passwd);
+            setLoginState({
+                type: 'done',
+                ownUser: user,
+                sessionToken: loginRes.token
+            })
+            ownUserRef.current = user;
+            sessionTokenRef.current = loginRes.token;
+            eventIdForUsers.current = loginRes.eventIdForUsers;
+
+            setChatLines(d => [
+                ...d,
+                {
+                    className: styles.hintLine,
+                    text: `Welcome, ${user}!`
+                }
+            ])
+            setScrollDown(true);
+            setChatInputFrozen(false);
 
                 setUserList({
                     users: loginRes.users.map(userName => ({
                         name: userName
                     })),
-                    selected: -1
+                    selected:  -1
                 })
-            }).catch(reason => {
-                console.error(reason);
-                alert('Server problem');
-                setLoginState({
-                    type: 'loggingIn'
-                })
-            }).finally(() => {
-                setServerHint(false);
-            })
+
+            {
+                const handlers: VideoHandlers = {
+                    onToolbarData: (data: ToolbarData | null) => {
+                        setToolbarData(data);
+                    },
+                    onVideoCall: (active: boolean) => {
+                        setVideoCall(active);
+                    },
+                    onLocalStream: (s) => {
+                        setLocalMediaStream(s);
+                    },
+                    onRemoteStream: (s) => {
+                        setRemoteMediaStream(s);
+                    },
+                    onHint: (hint: string, alert?: boolean) => {
+                        pushHintLine(hint);
+                        if (alert) {
+                            window.alert(hint);
+                        }
+                    },
+                    onError: (error: string) => {
+                        pushErrorLine(error);
+                    },
+                    onPauseEnded: () => {
+                        setWaitingForPush(false);
+                        waitingForPushRef.current = false;
+                        if (chatManagerRef.current != null) {
+                            // TODO ?
+                            // chatManagerRef.current.setPause(false);
+                        }
+                    },
+                    onWaitForPush: () => {
+                        setWaitingForPush(true);
+                        waitingForPushRef.current = true;
+                    }
+                };
+
+                if (videoManagerRef.current != null) {
+                    videoManagerRef.current.close();
+                }
+                videoManagerRef.current = new VideoManager(user, loginRes.token, timeoutMs, fetcher, handlers);
+            }
+        }
+    }
+
+    function handleLoginError(reason: any) {
+        console.error(reason);
+        alert('Server problem');
+        setLoginState({
+            type: 'loggingIn'
+        })
+
+    }
+
+    function onLogin() {
+        const fetcher = accumulatedFetcher.current;
+        if (fetcher == null) return;
+        const user = loginName;
+        const passwd = loginPasswd;
+
+        sendLogin(user, passwd).then(resp => {
+            handleLoginResp(user, passwd, fetcher, resp);
+        }).catch(reason => {
+            handleLoginError(reason);
+        }).finally(() => {
+            setServerHint(false);
+        })
+
+
+        // const req: LoginReq = {
+        //     type: 'login',
+        //     user: user,
+        //     passwd: passwd,
+        //     chatId: chatId
+
+        // }
+        // setServerHint(true);
+        // fetcher.push<LoginReq, LoginResp>(req)
+        //     .then((loginRes: ApiResp<LoginResp>) => {
+        //         if (loginRes.type === 'error') {
+        //             alert('Error on login: ' + loginRes.error);
+        //             return;
+        //         } else if (loginRes.type === 'authenticationFailed') {
+        //             alert('Wrong user name or password!');
+        //             return;
+        //         } else if (loginRes.type === 'success') {
+        //             localStorage.setItem('user', req.user);
+        //             localStorage.setItem('passwd', req.passwd);
+        //             setLoginState({
+        //                 type: 'done',
+        //                 ownUser: user,
+        //                 sessionToken: loginRes.token
+        //             })
+        //             ownUserRef.current = user;
+        //             sessionTokenRef.current = loginRes.token;
+        //             eventIdForUsers.current = loginRes.eventIdForUsers;
+
+        //             setChatLines(d => [
+        //                 ...d,
+        //                 {
+        //                     className: styles.hintLine,
+        //                     text: `Welcome, ${user}!`
+        //                 }
+        //             ])
+        //             setScrollDown(true);
+        //             console.debug('vor executeRequest', requestStateRef.current);
+        //             executeRequest();
+        //             console.debug('nach executeRequest', requestStateRef.current);
+        //             setChatInputFrozen(false);
+        //             {
+        //                 const handlers: VideoHandlers = {
+        //                     onToolbarData: (data: ToolbarData | null) => {
+        //                         setToolbarData(data);
+        //                     },
+        //                     onVideoCall: (active: boolean) => {
+        //                         setVideoCall(active);
+        //                     },
+        //                     onLocalStream: (s) => {
+        //                         setLocalMediaStream(s);
+        //                     },
+        //                     onRemoteStream: (s) => {
+        //                         setRemoteMediaStream(s);
+        //                     },
+        //                     onHint: (hint: string, alert?: boolean) => {
+        //                         pushHintLine(hint);
+        //                         if (alert) {
+        //                             window.alert(hint);
+        //                         }
+        //                     },
+        //                     onError: (error: string) => {
+        //                         pushErrorLine(error);
+        //                     },
+        //                     onPauseEnded: () => {
+        //                         setWaitingForPush(false);
+        //                         waitingForPushRef.current = false;
+        //                         if (executeRequestInterrupted.current) {
+        //                             executeRequestInterrupted.current = false;
+        //                             executeRequest();
+        //                         }
+        //                     },
+        //                     onWaitForPush: () => {
+        //                         setWaitingForPush(true);
+        //                         waitingForPushRef.current = true;
+        //                     }
+        //                 };
+
+        //                 if (videoManagerRef.current != null) {
+        //                     videoManagerRef.current.close();
+        //                 }
+        //                 videoManagerRef.current = new VideoManager(user, loginRes.token, timeoutMs, fetcher, handlers);
+        //             }
+
+        //         }
+
+        //         // If quick dialing is triggered by the entry callee in sessionStorage, act as if the user selected the callee and clicked Call.
+        //         const callee = sessionStorage.getItem('callee');
+
+        //         setUserList({
+        //             users: loginRes.users.map(userName => ({
+        //                 name: userName
+        //             })),
+        //             selected: callee == null ? -1 : loginRes.users.findIndex((userName => userName === callee))
+        //         })
+        //     }).catch(reason => {
+        //         console.error(reason);
+        //         alert('Server problem');
+        //         setLoginState({
+        //             type: 'loggingIn'
+        //         })
+        //     }).finally(() => {
+        //         setServerHint(false);
+        //     })
     }
 
     function onRegister() {
@@ -508,6 +711,49 @@ export default function Home() {
         }
     }, [scrollDown, chatLines])
 
+    /**
+     * On mount of this site, check if callee is set in the session store.
+     * If yes, check if localStorage contains user and passwd.
+     * If no, act as if user had clicked on login and then continue here.
+     * Then, check if callee is in the users' list.
+     * If no, show an error message.
+     * Otherwise, act as if user was selected and call was clicked.
+     */
+    useEffect(() => {
+        console.warn('1st effect for quick dialing called');
+        const callee = sessionStorage.getItem('callee');
+        if (callee == null) return;
+
+        const user = localStorage.getItem('user');
+        const passwd = localStorage.getItem('passwd');
+        if (user == null || passwd == null) {
+            // setLoginState({
+            //     type: 'loggingIn'
+            // })
+            // setLoginName(user ?? '');
+            // setLoginPasswd(passwd ?? '');
+            enterLogin();
+            return;
+        }
+
+        console.log(`would now login and call ${callee}`);
+        sendLogin(user, passwd);
+    }, [])
+
+    // This effect triggers the call after the selection of the callee if quick dialing is enabled
+    // by an entry callee in the session storage
+    useEffect(() => {
+        console.warn('2nd effect for quick dialing')
+        if (userList.selected !== -1) {
+            const callee = sessionStorage.getItem('callee');
+            if (callee != null) {
+                sessionStorage.removeItem('callee');
+                videoManagerRef.current?.onCall(userList.users[userList.selected].name);
+                console.warn('onCall called on videoManager');
+            }
+        }
+    }, [userList])
+
     function onLoginKeyDown(e: KeyboardEvent<HTMLInputElement>) {
         if (e.key === 'Enter') {
             onLogin();
@@ -521,25 +767,28 @@ export default function Home() {
     }
 
     function onChatSend() {
+        console.log('onChatSend');
         if (ownUserRef.current == null) return;
         if (chatInputFrozen) return;
+        if (chatManagerRef.current == null) return;
 
+        chatManagerRef.current.send(chatInput);
 
-        switch (requestStateRef.current) {
-            case 'waiting for timeout':
-                if (timeout.current == null) throw new Error('timeout null');
-                clearTimeout(timeout.current);
-                lineToSendRef.current = chatInput;
-                executeRequest();
-                break;
-            case 'fetching':
-                requestStateRef.current = 'pending';
-                setChatInputFrozen(true);
-                lineToSendRef.current = chatInput
-                break;
-            default:
-                break;
-        }
+        // switch (requestStateRef.current) {
+        //     case 'waiting for timeout':
+        //         if (timeout.current == null) throw new Error('timeout null');
+        //         clearTimeout(timeout.current);
+        //         lineToSendRef.current = chatInput;
+        //         executeRequest();
+        //         break;
+        //     case 'fetching':
+        //         requestStateRef.current = 'pending';
+        //         setChatInputFrozen(true);
+        //         lineToSendRef.current = chatInput
+        //         break;
+        //     default:
+        //         break;
+        // }
     }
 
     const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
@@ -569,11 +818,11 @@ export default function Home() {
         setLoginState({
             type: 'welcome',
         })
-        requestStateRef.current = 'logging in';
-        if (timeout.current != null) {
-            clearTimeout(timeout.current);
-            timeout.current = null;
-        }
+        // requestStateRef.current = 'logging in';
+        // if (timeout.current != null) {
+        //     clearTimeout(timeout.current);
+        //     timeout.current = null;
+        // }
         setUserList({
             users: [],
             selected: -1
@@ -593,6 +842,11 @@ export default function Home() {
             videoManagerRef.current.close();
         }
 
+        if (chatManagerRef.current != null) {
+            chatManagerRef.current.close();
+            chatManagerRef.current = null;
+        }
+
         const req: LogoutReq = {
             type: 'logout',
             user: ownUserRef.current,
@@ -610,9 +864,8 @@ export default function Home() {
     }
 
     function onRetryConnect() {
-        if (requestStateRef.current === 'waiting on error') {
-            console.debug('vor executeRequest', requestStateRef.current);
-            executeRequest();
+        if (chatManagerRef.current != null) {
+            chatManagerRef.current.resumeAfterError();
         }
 
         if (accumulatedFetcher.current != null) {
@@ -695,8 +948,8 @@ export default function Home() {
                             <div className={styles.imgAttribute}><a href="https://www.freepik.com/free-vector/video-conferencing-concept-landing-page_5155828.htm#query=video%20call&position=13&from_view=search&track=ais&uuid=d88bd399-7c39-4f67-8c62-d2715f65f654">Image by pikisuperstar</a> on Freepik</div>
 
                             <p>
-                                This is mainly for demonstration and my personal usage. So, registration is without the necessity 
-                                to provide any personal data. Not even an email address is required. 
+                                This is mainly for demonstration and my personal usage. So, registration is without the necessity
+                                to provide any personal data. Not even an email address is required.
                                 Just, choose a user name and a password. {'That\'s'} it. (At least as long as the usage is within
                                 reasonable borders... ;-)
                             </p>
@@ -745,6 +998,9 @@ export default function Home() {
                         }
                     </div>
                     <div className={styles.right}>
+                        <button onClick={() => {
+                            router.push(`/quick/${encodeURIComponent('/?!#ÄÖÜ')}`);
+                        }}>test quick</button>
                         {/* <button onClick={() => {
                             window.open('/api/webRTC/mini', 'webRTC-mini', "directories=0,titlebar=0,toolbar=0,location=0,status=0,menubar=0,scrollbars=no,resizable=no,width=400,height=350");
                         }}>Test window</button> */}
