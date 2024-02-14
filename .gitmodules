@@ -16,3 +16,6 @@
 [submodule "app/_lib/pr-timeout"]
 	path = app/_lib/pr-timeout
 	url = https://github.com/preitinger/pr-timeout.git
+[submodule "app/_lib/pr-test-utils"]
+	path = app/_lib/pr-test-utils
+	url = https://github.com/preitinger/pr-test-utils.git
