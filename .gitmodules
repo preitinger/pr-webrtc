@@ -13,3 +13,6 @@
 [submodule "app/_lib/pr-push-api-server"]
 	path = app/_lib/pr-push-api-server
 	url = https://github.com/preitinger/pr-push-api-server.git
+[submodule "app/_lib/pr-timeout"]
+	path = app/_lib/pr-timeout
+	url = https://github.com/preitinger/pr-timeout.git
