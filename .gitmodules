@@ -19,3 +19,6 @@
 [submodule "app/_lib/pr-test-utils"]
 	path = app/_lib/pr-test-utils
 	url = https://github.com/preitinger/pr-test-utils.git
+[submodule "app/_lib/pr-client-utils"]
+	path = app/_lib/pr-client-utils
+	url = https://github.com/preitinger/pr-client-utils.git
