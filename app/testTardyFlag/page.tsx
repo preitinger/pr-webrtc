@@ -22,7 +22,7 @@ export default function Page() {
         return m;
     }
 
-    const tardyFlag = useTardyFlag({
+    const [tardyFlag, set] = useTardyFlag({
         initialValue: false,
         // timeoutDelays: createTimeoutDelays()
         timeoutDelays: {
