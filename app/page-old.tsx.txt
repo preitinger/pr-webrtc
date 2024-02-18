@@ -147,9 +147,15 @@ export default function Home() {
             } : msg.type === 'UserEntered' ? {
                 className: styles.hintLine,
                 text: `[${msg.user} has entered.]`
-            } : {
+            } : msg.type === 'UserLeft' ? {
                 className: styles.hintLine,
                 text: `[${msg.user} has left.]`
+            } : msg.type === 'Error' ? {
+                className: styles.errorLine,
+                text: msg.error
+            } : /* msg.type === 'Hint' */ {
+                className: styles.hintLine,
+                text: msg.hint
             }))
         )])
 

@@ -7,7 +7,10 @@ export type ChatReq = {
     chatId: string;
     user: string;
     token: string;
-    msg: string | null;
+    lines: string[];
+    /**
+     * If none yet, -1
+     */
     lastEventId: number;
 }
 
@@ -21,12 +24,19 @@ export type ChatEvent = {
 } | {
     type: 'UserLeft';
     user: string;
+} | {
+    type: 'Error';
+    error: string;
+} | {
+    type: 'Hint';
+    hint: string;
 }
 
 export type ChatResp = {
     type: 'success';
     events: ChatEvent[];
     lastEventId: number;
+    linesMissing: boolean;
 } | {
     type: 'authenticationFailed';
 }

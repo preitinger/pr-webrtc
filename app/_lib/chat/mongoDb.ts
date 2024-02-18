@@ -5,6 +5,7 @@ import { EventDoc, ChatDoc, UserOnline } from "./chat-server";
 import { ApiResp } from "../user-management-client/user-management-common/apiRoutesCommon";
 import { checkToken, executeLogin } from "../user-management-server/userManagementServer";
 import clientPromise from "../user-management-server/mongodb";
+import timeout from "../pr-timeout/pr-timeout";
 
 //////////////////////////////////////////////////////////// mit class?
 class ChatsCol {
@@ -197,18 +198,22 @@ function eventValue(e: EventDoc): ChatEvent {
     } : e.type === 'UserEntered' ? {
         type: e.type,
         user: e.user,
-    } : {
+    } : e.type === 'UserLeft' ? {
         type: e.type,
         user: e.user
-    }
+    } : e.type === 'Hint' ? {
+        type: e.type,
+        hint: e.hint
+    } : {
+        type: e.type,
+        error: e.error
+    };
 }
 
 export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
-    // await (new Promise<void>((res, rej) => {
-    //     setTimeout(() => {
-    //         res();
-    //     }, 3000)
-    // }));
+    // just for testing:
+    // await timeout(3000, new AbortController().signal);
+
     const tokenValid = checkToken(req.user, req.token);
     const client = await clientPromise;
     const db = client.db('chats');
@@ -220,8 +225,8 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
         }
     }
 
-    const msg = req.msg;
-    if (msg != null) {
+    const lines = req.lines;
+    for (const msg of lines) {
         const nextEventId = await readAndIncrementNextEventId(req.chatId, req.user)
         const insertRes = await eventsCol.insertOne({
             type: 'ChatMsg',
@@ -233,9 +238,8 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
             console.error('insert not acknowledged?!');
             throw new Error('Unexpected: insert not acknowledged');
         }
-    } else {
-        updateLastAction(req.chatId, req.user);
     }
+    updateLastAction(req.chatId, req.user);
 
     const events = await (
         req.lastEventId == null
@@ -246,6 +250,7 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
                 }
             })
     ).limit(100).toArray();
+    const linesMissing = events.length === 100;
 
     // console.log('req.lastEventId', req.lastEventId);
     // console.log('found events', events);
@@ -276,7 +281,8 @@ export async function executeChatReq(req: ChatReq): Promise<ApiResp<ChatResp>> {
     return {
         type: 'success',
         events: eventValues,
-        lastEventId: lastId
+        lastEventId: lastId,
+        linesMissing: linesMissing
     }
 }
 

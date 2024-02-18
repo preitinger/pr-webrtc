@@ -5,6 +5,7 @@ import { deleteInactiveUsers, getChatsCol, getDb, getEventsCol } from "./mongoDb
 import { executeLogin as executeUserManagementLogin } from "../user-management-server/userManagementServer";
 import { LoginResp as UserManagementLoginResp } from "../user-management-server/user-management-common/login";
 import { UserOnline } from "./chat-server";
+import timeout from "../pr-timeout/pr-timeout";
 
 const inactiveMs = 300000;
 // const inactiveMs = 5000;

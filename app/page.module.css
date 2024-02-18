@@ -7,7 +7,7 @@
     /* height: 4rem; */
     padding: 0;
     @media(min-width: 501px) {
-        height: 5rem;
+        height: 4rem;
     }
 }
 .header {
@@ -156,4 +156,29 @@
         right: 3rem;
     }
     width: auto;
+}
+.flexColumn {
+    display: flex;
+    flex-direction: column;
+    max-width: 800px;
+}
+
+.dismiss {
+    color: gray;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.startPage {
+    margin: 0;
+    padding: 0;
+    max-width: 800px;
+}
+.error {
+    display: block;
+    position: fixed;
+    top:0.5rem;
+    right: 0.5rem;
+    width:auto;
+    height: auto;
 }

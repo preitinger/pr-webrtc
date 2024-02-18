@@ -118,3 +118,9 @@
     outline: 1px solid black !important;
     color: black !important; */
 }
+.sendingPrefix {
+    font-size: 50%;
+}
+.sendingPrefix, .sendingContent {
+    color: gray;
+}

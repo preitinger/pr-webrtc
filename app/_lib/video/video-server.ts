@@ -1,5 +1,5 @@
-import clientPromise from "../mongodb";
 import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
+import clientPromise from "../user-management-server/mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
 import { checkToken } from "../user-management-server/userManagementServer";
 import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, DeletePushSubscriptionReq, DeletePushSubscriptionResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, SavePushSubscriptionReq, SavePushSubscriptionResp, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
