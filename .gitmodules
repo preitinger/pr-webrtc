@@ -22,3 +22,12 @@
 [submodule "app/_lib/pr-client-utils"]
 	path = app/_lib/pr-client-utils
 	url = https://github.com/preitinger/pr-client-utils.git
+[submodule "pr-msg-common"]
+	path = pr-msg-common
+	url = https://github.com/preitinger/pr-msg-common.git
+[submodule "pr-msg-client"]
+	path = pr-msg-client
+	url = https://github.com/preitinger/pr-msg-client.git
+[submodule "pr-msg-server"]
+	path = pr-msg-server
+	url = https://github.com/preitinger/pr-msg-server.git
