@@ -1,0 +1,183 @@
+.top {
+    /* display: flex;
+    flex-direction: column;
+    flex-wrap: wrap; */
+    margin-top: 0;
+    margin-bottom: 3rem;
+    /* height: 4rem; */
+    padding: 0;
+    @media(min-width: 501px) {
+        height: 4rem;
+    }
+}
+.header {
+    @media(min-width: 501px) {
+        position: absolute;
+        left: 1.5rem;
+        top: 1.5rem;
+        right: 10rem;
+        bottom: auto;
+        max-width: 800px;
+    }
+}
+.img {
+    transition: width 0.5s;
+    transition: height 0.5s;
+}
+.imgAttribute {
+    color: gray;
+    font-size: small;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 2rem;
+}
+.imgAttribute a {
+    color: gray;
+}
+
+@media (min-width: 1000px) {
+    .main {
+        position: relative;
+        padding: 2rem;
+        height: 90vh;
+    }
+
+    .left {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 40ex;
+    }
+
+    .right {
+        position: absolute;
+        left: 40ex;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        /* border:1px solid red; */
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 999px) {
+    .main {
+        padding: 0;
+        margin: 0;
+        height: auto;
+    }
+
+    .left {
+        height: auto;
+    }
+
+    .right {
+        display: flex;
+        flex-direction: column;
+        height: auto;
+    }
+}
+
+
+.call {
+    margin-top: 0.8rem;
+    border-radius: 1rem;
+    padding: 1rem;
+}
+
+.callButton:disabled {
+    color: gray;
+}
+
+.frozen {
+    border: gray;
+    background: lightgray;
+    color: gray;
+}
+
+.redButton, .greenButton {
+    color: white;
+    height: 60px;
+    width: 200px;
+    font-size: large;
+    margin: 0.5rem;
+    border-radius: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-decoration: none;
+}
+
+.redButton:hover, .redButton:focus, .greenButton:hover, .greenButton:focus {
+    font-size: larger;
+}
+
+.redButton {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(358, 87%, 30%) 100%);
+}
+
+.redButton:hover, .redButton:focus {
+    background: rgb(73, 72, 72);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(358, 87%, 40%) 100%);
+}
+
+.greenButton {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(92, 95%, 30%) 100%);
+}
+
+.greenButton:hover, .greenButton:focus {
+    background: rgb(25,25,25);
+    background: linear-gradient(0deg, rgba(25,25,25,1) 0%, hsl(92, 95%, 40%) 100%);
+}
+
+.buttonRow {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: center;
+    align-items: center;
+}
+
+.logout {
+    @media(max-width: 500px) {
+        float: right;
+    }
+    @media(min-width: 501px) {
+        position: absolute;
+        top: 3rem;
+        right: 3rem;
+    }
+    width: auto;
+}
+.flexColumn {
+    display: flex;
+    flex-direction: column;
+    max-width: 800px;
+}
+
+.dismiss {
+    color: gray;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.startPage {
+    margin: 0;
+    padding: 0;
+    max-width: 800px;
+}
+.error {
+    display: block;
+    position: fixed;
+    top:0.5rem;
+    right: 0.5rem;
+    width:auto;
+    height: auto;
+}
+
+.errorParagraph {
+    color: red;
+}

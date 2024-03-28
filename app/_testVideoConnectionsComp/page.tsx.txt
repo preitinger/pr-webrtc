@@ -1,0 +1,102 @@
+'use client';
+
+import { useCallback, useRef, useState } from "react";
+import { UseVideoProps, VideoConnectionsComp, useVideo } from "../_lib/video/video-client";
+import { AccumulatedFetching } from "../_lib/user-management-client/AccumulatedFetching";
+import { LoginReq, LoginResp } from "../_lib/chat/login-common";
+
+const smallTests: { [key: string]: () => void } = {
+    '1': () => {
+        // small tests work also good directly in the chrome browser's console ;-)
+        console.log('small test 1 executed ;-)')
+    }
+}
+
+export default function Page() {
+    const [useVideoProps, setUseVideoProps] = useState<UseVideoProps>({
+        // userListState: {
+        //     users: ['a', 'b', 'c'].map(name => ({ name: name })),
+        //     selected: -1
+        // }
+    })
+    const video = useVideo(useVideoProps)
+    const [quickCallee, setQuickCallee] = useState<string>('');
+    const accumulatedFetching = useRef<AccumulatedFetching | null>(null);
+    const ownUser = useRef<string>('');
+    const token = useRef<string>('');
+
+    const fetchError = useCallback((error: string) => {
+        console.log('fetched error', error);
+    }, [])
+    function startVideoActivity() {
+        if (accumulatedFetching.current == null) {
+            accumulatedFetching.current = new AccumulatedFetching('/api/webRTC', {
+                fetchError
+            })
+        }
+        video.startVideoCallsActivity(quickCallee === '' ? null : quickCallee, accumulatedFetching.current, ownUser.current, token.current);
+    }
+    const [smallTestName, setSmallTestName] = useState<string>('');
+    function runSmallTest() {
+        const smallTest = smallTests[smallTestName];
+        if (smallTest == null) {
+            alert(`Test "${smallTestName}" not found!`);
+        } else {
+            smallTest();
+        }
+    }
+    return (
+        <div>
+            <div>
+                <button onClick={async () => {
+                    const req: LoginReq = {
+                        type: 'login',
+                        user: 'b',
+                        passwd: '',
+                        chatId: 'test'
+                    }
+                    if (accumulatedFetching.current == null) {
+                        accumulatedFetching.current = new AccumulatedFetching('/api/webRTC', {
+                            fetchError
+                        })
+                    }
+                    const resp = await accumulatedFetching.current.pushRaw<LoginReq, LoginResp>(req);
+                    console.log('resp', resp);
+                    if (resp.type === 'success') {
+                        ownUser.current = req.user;
+                        token.current = resp.token;
+                    }
+                }}>Login as b</button>
+                <button onClick={async () => {
+                    const req: LoginReq = {
+                        type: 'login',
+                        user: 'c',
+                        passwd: '',
+                        chatId: 'test'
+                    }
+                    if (accumulatedFetching.current == null) {
+                        accumulatedFetching.current = new AccumulatedFetching('/api/webRTC', {
+                            fetchError
+                        })
+                    }
+                    const resp = await accumulatedFetching.current.pushRaw<LoginReq, LoginResp>(req);
+                    console.log('resp', resp);
+                    if (resp.type === 'success') {
+                        ownUser.current = req.user;
+                        token.current = resp.token;
+                    }
+                }}>Login as c</button>
+            </div>
+            <div>
+                <input type='text' value={quickCallee} onChange={(e) => { setQuickCallee(e.target.value) }} />
+                <button onClick={startVideoActivity}>Start video activity</button>
+                <VideoConnectionsComp {...video.videoConnectionsProps} />
+            </div>
+            <div>
+                <h4>Run small test</h4>
+                Test name <input type='text' value={smallTestName} onChange={(e) => setSmallTestName(e.target.value)} />
+                <button onClick={runSmallTest}>Run</button>
+            </div>
+        </div>
+    )
+}

@@ -15,7 +15,7 @@
     z-index: 2;
     background-color: white;
     color: black;
-    padding: 2em;
-    border-radius: 1em;
+    padding: 0;
+    border-radius: 1rem;
     opacity:0.8;
 }

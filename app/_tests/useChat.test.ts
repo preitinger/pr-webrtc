@@ -5,7 +5,7 @@ import { ChatEvent, ChatReq, ChatResp } from "../_lib/chat/chat-common";
 import { AccumulatedResp } from "../_lib/user-management-server/user-management-common/apiRoutesCommon";
 import { ChangeEventHandler } from "react";
 import { AccumulatedReq } from "../_lib/user-management-client/user-management-common/apiRoutesCommon";
-import FixedAbortController from "../_lib/user-management-client/FixedAbortController";
+import FixedAbortController from "../_lib/pr-client-utils/FixedAbortController";
 
 jest.useFakeTimers();
 
@@ -102,6 +102,7 @@ a sub-state with all received chat events', () => {
                         }
                     ],
                     lastEventId: (++nextEventId),
+                    linesMissing: false
                 }
                 const accumulatedResp: AccumulatedResp = {
                     type: 'success',
@@ -129,7 +130,8 @@ a sub-state with all received chat events', () => {
             await act(async () => {
                 await fakeSleep(1000);
                 console.log('after 1sec', chat.result.current);
-                chat.result.current.onStart(accumulatedFetching, loginResultData, function () {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                onStart(accumulatedFetching, loginResultData, function () {
                     expect(true).toBe(false);
                 });
                 console.log('after onStart', chat.result.current);
@@ -139,10 +141,12 @@ a sub-state with all received chat events', () => {
 
             chat.rerender(props);
             function length(result: Result) {
-                return result.result.current.chatEvents.length;
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                return state.chatEvents.length;
             }
             function event(result: Result, idx: number) {
-                return result.result.current.chatEvents[idx];
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                return state.chatEvents[idx];
             }
             expect(length(chat)).toBe(1);
             expect(event(chat, 0)).toEqual({
@@ -155,20 +159,22 @@ a sub-state with all received chat events', () => {
             await act(async () => {
                 await fakeSleep(timeoutMs + 1)
             });
-            expect(length(chat)).toBe(2);
-            expect(event(chat, 1)).toEqual({
-                user: 'TestUser',
-                type: 'ChatMsg',
-                text: '1 line',
-            })
-            expect(chat.result.current.userList).toEqual({
-                users: initialUsers.map(name => ({
-                    name: name
-                })),
-                selected: -1
+            {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                expect(length(chat)).toBe(2);
+                expect(event(chat, 1)).toEqual({
+                    user: 'TestUser',
+                    type: 'ChatMsg',
+                    text: '1 line',
+                })
+                expect(state.userList).toEqual({
+                    users: initialUsers.map(name => ({
+                        name: name
+                    })),
+                    selected: -1
+                }
+                )
             }
-            )
-
             try {
                 await act(async () => {
                     chat.unmount();
@@ -256,6 +262,7 @@ a sub-state with all received chat events', () => {
                 type: 'success',
                 events: events,
                 lastEventId: (nextEventId += events.length),
+                linesMissing: false
             }
             const accumulatedResp: AccumulatedResp = {
                 type: 'success',
@@ -279,10 +286,12 @@ a sub-state with all received chat events', () => {
             }
         }, abortControllerForAccumulatedFetching);
 
+
         await act(async () => {
             await fakeSleep(1000);
             // console.log('after 1sec', chat.result.current);
-            chat.result.current.onStart(accumulatedFetching, loginResultData, function () {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onStart(accumulatedFetching, loginResultData, function () {
                 expect(true).toBe(false);
             });
             // console.log('after onAccumulatedFetching', chat.result.current);
@@ -291,80 +300,89 @@ a sub-state with all received chat events', () => {
 
         // console.log('current userList: ', chat.result.current.userList);
 
-        expect(chat.result.current.userList.users.map(u => u.name)).toEqual(['Hans', 'Sepp'])
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users.map(u => u.name)).toEqual(['Hans', 'Sepp'])
+        }
         await act(async () => {
             await fakeSleep(timeoutMs + 1);
         })
 
-        expect(chat.result.current.userList.users).toEqual([
-            {
-                name: 'a'
-            }, {
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            },
-        ])
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users).toEqual([
+                {
+                    name: 'a'
+                }, {
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                },
+            ])
+        }
+        await act(async () => {
+            await fakeSleep(timeoutMs);
+        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users).toEqual([
+                {
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                },
+            ])
+        }
+        await act(async () => {
+            await fakeSleep(timeoutMs);
+        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users).toEqual([
+                {
+                    name: 'b'
+                }, {
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                },
+            ])
+        }
+        await act(async () => {
+            await fakeSleep(timeoutMs);
+        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users).toEqual([
+                {
+                    name: 'b'
+                }, {
+                    name: 'c'
+                }, {
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                },
+            ])
+        }
         await act(async () => {
             await fakeSleep(timeoutMs);
         })
 
-        expect(chat.result.current.userList.users).toEqual([
-            {
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            },
-        ])
-
-        await act(async () => {
-            await fakeSleep(timeoutMs);
-        })
-
-        expect(chat.result.current.userList.users).toEqual([
-            {
-                name: 'b'
-            }, {
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            },
-        ])
-
-        await act(async () => {
-            await fakeSleep(timeoutMs);
-        })
-
-        expect(chat.result.current.userList.users).toEqual([
-            {
-                name: 'b'
-            }, {
-                name: 'c'
-            }, {
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            },
-        ])
-
-        await act(async () => {
-            await fakeSleep(timeoutMs);
-        })
-
-        expect(chat.result.current.userList.users).toEqual([
-            {
-                name: 'd'
-            }, {
-                name: 'e'
-            }, {
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            },
-        ])
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList.users).toEqual([
+                {
+                    name: 'd'
+                }, {
+                    name: 'e'
+                }, {
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                },
+            ])
+        }
         await act(async () => {
             chat.unmount();
             abortControllerForAccumulatedFetching.abort();
@@ -405,6 +423,7 @@ a sub-state with all received chat events', () => {
                 type: 'success',
                 events: events,
                 lastEventId: (nextEventId += events.length),
+                linesMissing: false
             }
             const accumulatedResp: AccumulatedResp = {
                 type: 'success',
@@ -430,7 +449,8 @@ a sub-state with all received chat events', () => {
         await act(async () => {
             await fakeSleep(1000);
             // console.log('after 1sec', chat.result.current);
-            chat.result.current.onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
                 expect(true).toBe(false);
             });
             // console.log('after onAccumulatedFetching', chat.result.current);
@@ -440,55 +460,64 @@ a sub-state with all received chat events', () => {
         // console.log('current userList: ', chat.result.current.userList);
 
         await act(async () => {
-            chat.result.current.onUserClick(0);
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onUserClick(0);
             await fakeSleep(10);
-        })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [{
-                name: 'Hans'
-            }, {
-                name: 'Sepp'
-            }],
-            selected: 0
         });
 
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [{
+                    name: 'Hans'
+                }, {
+                    name: 'Sepp'
+                }],
+                selected: 0
+            });
+        }
         await act(async () => {
             await fakeSleep(timeoutMs + 1);
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                {
-                    name: 'Sepp'
-                },
-            ],
-            selected: -1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    {
+                        name: 'Sepp'
+                    },
+                ],
+                selected: -1
+            })
+        }
         await act(async () => {
-            chat.result.current.onUserClick(0)
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onUserClick(0)
             await fakeSleep(1);
         })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                {
-                    name: 'Sepp'
-                },
-            ],
-            selected: 0
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    {
+                        name: 'Sepp'
+                    },
+                ],
+                selected: 0
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs);
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [],
-            selected: -1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [],
+                selected: -1
+            })
+        }
 
         await act(async () => {
             chat.unmount();
@@ -546,6 +575,7 @@ a sub-state with all received chat events', () => {
                 type: 'success',
                 events: events,
                 lastEventId: (nextEventId += events.length),
+                linesMissing: false
             }
             const accumulatedResp: AccumulatedResp = {
                 type: 'success',
@@ -571,99 +601,116 @@ a sub-state with all received chat events', () => {
         await act(async () => {
             await fakeSleep(1000);
             // console.log('after 1sec', chat.result.current);
-            chat.result.current.onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
-                expect(true).toBe(false);
-            });
-            // console.log('after onAccumulatedFetching', chat.result.current);
+            {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
+                    expect(true).toBe(false);
+                });
+            }            // console.log('after onAccumulatedFetching', chat.result.current);
             await fakeSleep(1);
-            chat.result.current.onUserClick(0);
-            await fakeSleep(1);
+            {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                onUserClick(0);
+            } await fakeSleep(1);
         })
         // console.warn('before rerender')
         chat.rerender();
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 0
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 0
+            })
+        }
+        await act(async () => {
+            await fakeSleep(timeoutMs);
+        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                ],
+                selected: 0
+            })
+        }
+        await act(async () => {
+            await fakeSleep(timeoutMs);
+        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Zarathustra' }
+                ],
+                selected: 0
+            })
+        }
+        await act(async () => {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onUserClick(1);
         })
 
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Zarathustra' }
+                ],
+                selected: 1
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs);
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-            ],
-            selected: 0
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Zarathustra' },
+                    { name: 'Zed' },
+                    { name: 'Zorro' }
+                ],
+                selected: 1
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs);
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Zarathustra' }
-            ],
-            selected: 0
-        })
-
-        await act(async () => {
-            chat.result.current.onUserClick(1);
-        })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Zarathustra' }
-            ],
-            selected: 1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Zarathustra' },
+                    { name: 'Zorro' }
+                ],
+                selected: 1
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs);
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Zarathustra' },
-                { name: 'Zed' },
-                { name: 'Zorro' }
-            ],
-            selected: 1
-        })
-
-        await act(async () => {
-            await fakeSleep(timeoutMs);
-        })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Zarathustra' },
-                { name: 'Zorro' }
-            ],
-            selected: 1
-        })
-
-        await act(async () => {
-            await fakeSleep(timeoutMs);
-        })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Zarathustra' },
-            ],
-            selected: 1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Zarathustra' },
+                ],
+                selected: 1
+            })
+        }
 
         await act(async () => {
             chat.unmount();
@@ -745,6 +792,7 @@ a sub-state with all received chat events', () => {
                 type: 'success',
                 events: events,
                 lastEventId: (nextEventId += events.length),
+                linesMissing: false
             }
             const accumulatedResp: AccumulatedResp = {
                 type: 'success',
@@ -770,89 +818,106 @@ a sub-state with all received chat events', () => {
         await act(async () => {
             await fakeSleep(1000);
             // console.log('after 1sec', chat.result.current);
-            chat.result.current.onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
-                expect(true).toBe(false);
-            });
+            {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
+                    expect(true).toBe(false);
+                });
+            }
 
             // console.log('after onAccumulatedFetching', chat.result.current);
             await fakeSleep(1);
-            chat.result.current.onUserClick(0);
+            {
+                const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+                onUserClick(0);
+            }
             await fakeSleep(1);
         })
 
         chat.rerender();
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 0
-        })
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 0
+            })
+
+        }
 
         await act(async () => {
             await fakeSleep(timeoutMs)
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Adam' },
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Adam' },
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 1
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs)
         })
 
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 0
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 0
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs)
         })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Adam' },
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Adam' },
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 1
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs)
         })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-                { name: 'Adam' },
-                { name: 'Berta' },
-                { name: 'Caesar' },
-                { name: 'Hans' },
-                { name: 'Sepp' }
-            ],
-            selected: 3
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                    { name: 'Adam' },
+                    { name: 'Berta' },
+                    { name: 'Caesar' },
+                    { name: 'Hans' },
+                    { name: 'Sepp' }
+                ],
+                selected: 3
+            })
+        }
         await act(async () => {
             await fakeSleep(timeoutMs)
         })
-
-        expect(chat.result.current.userList).toEqual({
-            users: [
-            ],
-            selected: -1
-        })
-
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.userList).toEqual({
+                users: [
+                ],
+                selected: -1
+            })
+        }
 
         await act(async () => {
             chat.unmount();
@@ -886,6 +951,7 @@ a sub-state with all received chat events', () => {
                 type: 'success',
                 events: events,
                 lastEventId: (nextEventId += events.length),
+                linesMissing: false
             }
             const accumulatedResp: AccumulatedResp = {
                 type: 'success',
@@ -911,15 +977,20 @@ a sub-state with all received chat events', () => {
         await act(async () => {
             await fakeSleep(1000);
             // console.log('after 1sec', chat.result.current);
-            chat.result.current.onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            onStart(accumulatedFetching, { user: 'user', sessionKey: 'sessionKey', eventIdForUsers: 0, initialUsers: initialUsers }, function () {
                 expect(true).toBe(false);
             });
         })
 
-        expect(chat.result.current.chatEvents).toEqual([]);
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.chatEvents).toEqual([]);
+        }
 
         await act(async () => {
-            chat.result.current.addErrorLine('test error')
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            addErrorLine('test error')
         })
 
         const expectedChatEvents: ChatEvent[] = [
@@ -928,7 +999,10 @@ a sub-state with all received chat events', () => {
                 error: 'test error'
             }
         ]
-        expect(chat.result.current.chatEvents).toEqual(expectedChatEvents);
+        {
+            const [state, onStart, onInputChange, onSend, onUserClick, addErrorLine, onStop] = chat.result.current;
+            expect(state.chatEvents).toEqual(expectedChatEvents);
+        }
 
         await act(async () => {
             chat.unmount();

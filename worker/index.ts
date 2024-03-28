@@ -9,12 +9,20 @@
 
 export type Version = number
 
-const version: Version = 7
+const version: Version = 10
 
 declare const self: ServiceWorkerGlobalScope;
 
 console.log('Custom service worker functions for pr-webrtc: version=', version);
 
 self.addEventListener('push', (e) => {
-    console.log('push event');
+    console.log('push event: e=', e);
+    console.log('e.data?.json()', e.data?.json())
+    self.clients.matchAll().then(clients => {
+        console.log('clients.length', clients.length);
+        clients.forEach(client => {
+            console.log('sending push to', client);
+            client.postMessage(e.data?.json());
+        })
+    })
 })

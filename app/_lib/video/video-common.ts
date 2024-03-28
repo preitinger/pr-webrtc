@@ -129,3 +129,36 @@ export type AuthenticatedVideoReq<Req> = {
     sessionToken: string;
     req: Req;
 }
+
+// old-2
+
+
+export interface StoreMsgReq {
+    type: 'storeMsg'
+    sender: string;
+    receiver: string;
+    msg: string;
+}
+export type StoreMsgResp = {
+    type: 'success'
+}
+
+// new
+
+export interface PushSubscribeReq {
+    type: 'pushSubscribe';
+    subscription: string;
+}
+
+export type PushSubscribeResp = {
+    type: 'success'
+}
+
+export interface PushNotifyReq {
+    type: 'pushNotify';
+    callee: string;
+}
+
+export type PushNotifyResp = {
+    type: 'success';
+}

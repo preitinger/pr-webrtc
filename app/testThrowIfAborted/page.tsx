@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from "react";
-import FixedAbortController from "../_lib/user-management-client/FixedAbortController";
+import FixedAbortController from "../_lib/pr-client-utils/FixedAbortController";
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => {

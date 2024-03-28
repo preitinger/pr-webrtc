@@ -6,8 +6,8 @@ import ContactingServerEvent, { CONTACTING_SERVER_EVENT_BUS_KEY } from "@/app/_l
 import styles from './ContactingServerManagedDlg.module.css'
 import ModalDialogWithoutFocusTrap from "./ModalDialogWithoutFocusTrap";
 import timeout, { timeoutWithResult } from "@/app/_lib/pr-timeout/pr-timeout";
-import FixedAbortController from "@/app/_lib/user-management-client/FixedAbortController";
 import useTardyFlag from "@/app/_lib/pr-client-utils/useTardyFlag";
+import FixedAbortController from "@/app/_lib/pr-client-utils/FixedAbortController";
 
 export interface ContactingServerManagedDlgProps {
     eventBusKey: string

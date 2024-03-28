@@ -1,8 +1,12 @@
-import FixedAbortController from "./user-management-client/FixedAbortController";
+import { Static, Union } from "runtypes";
+import FixedAbortController from "./pr-client-utils/FixedAbortController";
+import { RuntypeBase } from "runtypes/lib/runtype";
 
 export type ClosedException = {
     type: 'closed'
 };
+
+let globalTestCount = 0;
 
 export class Subscription<Event> {
     constructor(idx: number, bus: EventBus<Event>, secret: number, abortController: AbortController) {
@@ -15,6 +19,7 @@ export class Subscription<Event> {
         this.reject = null;
     }
     unsubscribe() {
+        this.abortController.signal.throwIfAborted();
         // console.log('unsubscribe(): this.reject', this.reject);
         if (this.prom != null) {
             // console.log('before this.prom.catch');
@@ -45,27 +50,92 @@ export class Subscription<Event> {
         this.pendingEvents.push(e);
     }
 
-    nextEvent(): Promise<Event> {
+    nextEvent(signal?: AbortSignal): Promise<Event> {
+        let result: Promise<Event>;
+        type Listener = () => void;
+        const addedAbortListeners: Listener[] = [];
+        function addAbortListener(l: Listener) {
+            signal?.addEventListener('abort', l, {
+                signal: signal
+            });
+            ++globalTestCount;
+            console.log('globalTestCount nach add', globalTestCount);
+
+            // const wastingMemInClosure: number[] = [];
+            // for (let i = 0; i < 1000000; ++i) {
+            //     wastingMemInClosure[i] = i;
+            // }
+            // const dummy = () => {
+            //     console.log('dummy: len', wastingMemInClosure.length);
+            // }
+            // for (let i = 0; i < 10; ++i) {
+            //     signal?.addEventListener('abort', dummy)
+            //     // signal?.removeEventListener('abort', dummy);
+            // }
+            addedAbortListeners.push(l);
+            console.log('abort listener added')
+        }
+
         if (this.abortController.signal.aborted) {
-            return Promise.reject('Already aborted');
-        }
-        if (this.pendingEvents.length > 0) {
-            const e = this.pendingEvents.splice(0, 1)[0];
-            return Promise.resolve(e);
-        } else if (this.prom != null) {
-            return this.prom;
+            result = Promise.reject(this.abortController.signal.reason);
         } else {
-            return (this.prom = new Promise((res, rej) => {
-                this.resolve = res;
-                this.reject = rej;
-            }))
+            if (this.pendingEvents.length > 0) {
+                const e = this.pendingEvents.splice(0, 1)[0];
+                result = Promise.resolve(e);
+            } else if (this.prom != null) {
+                const abortedProm = new Promise<never>((res, rej) => {
+                    // const wastingInClosure: number[] = [];
+                    // for (let i = 0; i < 1000000; ++i) wastingInClosure.push(i);
+
+                    function abortListener() {
+                        // console.log('len', wastingInClosure.length);
+                        console.log('abort listener[1] with once in nextEvent')
+                        rej(signal?.reason)
+                    }
+                    addAbortListener(abortListener);
+                })
+                result = Promise.race([
+                    this.prom,
+                    abortedProm
+                ]);
+            } else {
+                const abortedProm = new Promise<never>((res, rej) => {
+                    // const wastingInClosure: number[] = [];
+                    // for (let i = 0; i < 1000000; ++i) wastingInClosure.push(i);
+
+                    function abortListener() {
+                        // console.log('len', wastingInClosure.length);
+                        console.log('abort listener[2] with once in nextEvent')
+                        rej(signal?.reason)
+                    }
+                    addAbortListener(abortListener);
+                })
+                result = Promise.race([
+                    (this.prom = new Promise((res, rej) => {
+                        this.resolve = res;
+                        this.reject = rej;
+                    })),
+                    abortedProm
+                ])
+            }
+
         }
+
+        return result.finally(() => {
+            for (const l of addedAbortListeners) {
+                signal?.removeEventListener('abort', l);
+                console.log('abort listener removed')
+                --globalTestCount;
+                console.log('globalTestCount nach remove', globalTestCount);
+            }
+        })
     }
 
-    async nextEventWith(predicate: (e: Event) => boolean): Promise<Event> {
+    async nextEventWith(predicate: (e: Event) => boolean, signal?: AbortSignal): Promise<Event> {
         let e: Event;
         do {
-            e = await this.nextEvent();
+            e = await this.nextEvent(signal);
+            signal?.throwIfAborted();
         } while (!predicate(e));
         return e;
     }
@@ -173,4 +243,39 @@ export default class EventBus<Event> {
     private subscriptions: (Subscription<Event> | null)[] = [];
     private freeIndexes: number[] = [];
     private secret = Math.random();
+}
+
+
+export async function waitForOneOf(eventBus: EventBus<unknown>, ...eventTypes: string[]): Promise<unknown> {
+    const subscr = eventBus.subscribe();
+
+    try {
+        const e: any = await subscr.nextEventWith((e: any) => typeof (e.type) === 'string' && eventTypes.indexOf(e.type) !== -1);
+
+        if (typeof (e.type) !== 'string') throw new Error('Unexpected event: ' + JSON.stringify(e));
+        return e;
+
+    } finally {
+        subscr.unsubscribe();
+    }
+
+}
+
+export type EventBusOrSubscription<T> = {
+    bus: EventBus<T>
+} | {
+    subscr: Subscription<T>
+}
+
+export async function waitForGuard<Guard extends RuntypeBase<unknown>>(eventBusOrSubscription: EventBusOrSubscription<unknown>, guard: Guard, signal?: AbortSignal): Promise<Static<typeof guard>> {
+
+    const subscr = 'bus' in eventBusOrSubscription ? eventBusOrSubscription.bus.subscribe() : eventBusOrSubscription.subscr;
+    try {
+        const res = await subscr.nextEventWith((e) => guard.guard(e), signal);
+        return res;
+    } finally {
+        if ('eventBus' in eventBusOrSubscription) {
+            subscr.unsubscribe();
+        }
+    }
 }

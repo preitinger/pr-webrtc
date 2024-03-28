@@ -1,434 +1,29 @@
-'use client';
+'use client'
 
-import { KeyboardEvent, KeyboardEventHandler, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching"
-import ContactingServerManagedDlg from "@/components/ContactingServerManagedDlg";
-import ContactingServerEvent, { CONTACTING_SERVER_EVENT_BUS_KEY } from "./_lib/ContactingServerEvent";
+import { ChangeEvent, KeyboardEvent, KeyboardEventHandler, PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
+import routeActivity from "./routeActivity";
+import FixedAbortController from "./_lib/pr-client-utils/FixedAbortController";
+import * as rt from "runtypes";
 import { getEventBus, useEventBus } from "./useEventBus";
-import { LoginReq, LoginResp } from "./_lib/chat/login-common";
-import styles from './page.module.css';
+import styles from './page.module.css'
 import Image from "next/image";
-import { RegisterReq } from "./_lib/user-management-client/user-management-common/register";
-import { userRegisterFetch } from "./_lib/user-management-client/userManagementClient";
-import { ChatLine, ChatPanelComp, ChatUserListComp, LoginResultData, UseChatResult, UserListState, useChat } from "./_lib/chat/chat-client";
-import { ApiResp } from "./_lib/user-management-client/user-management-common/apiRoutesCommon";
-import { LogoutReq, LogoutResp } from "./_lib/chat/logout-common";
-import EventBus from "./_lib/EventBus";
-import FixedAbortController from "./_lib/user-management-client/FixedAbortController";
-import useTestHook from "./_lib/useTestHook";
+import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
+import { StartPageProps, RegisterClicked, LoginClicked, LoginOrRegisterDlgProps, LoginOrRegisterOk, CancelClicked, StartPage, LoginDlg, Busy, FetchError, TryAgainClicked, RegisterDlg, RegularPage, RegularPageProps, CallClicked/* , SetCallButtonText */, SetFetchErrorState, ChatStart, ChatStop, AuthFailed, AuthFailedDlg, EmptyPropsOrNull, CloseClicked, UseHereClicked, ChatAddErrorLine, FetchingSetInterrupted, LogoutClicked, WaitForPushClicked, SetupPushDlg, OkClicked, SetupPushProps, AwaitPushDlg, DecideIfWithVideoDlg, DecideIfWithVideoProps, SendVideoChanged, ReceiveVideoChanged, VideoConfigValue, ConfigSendVideoChanged, ConfigReceiveVideoChanged, SetCallActive, ModalDlg, VideoDataSettingsClicked, LocalMediaStream, HandlingFetchError, CameraTestClicked, SetCameraTestButton, ChatAddHintLine, ConnectionProps, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, ReceivedCallProps, AcceptClicked, HangUpClicked, HangUpProps, HangUpDlg, HangUp } from "./busEvents";
+import { ChatPanelComp, MultiSelectChatUserListComp, useMultiSelectChat } from "./_lib/chat/chat-client";
+import assert from "assert";
+import timeout from "./_lib/pr-timeout/pr-timeout";
+import useTardyFlag from "./_lib/pr-client-utils/useTardyFlag";
 import ModalDialog from "@/components/ModalDialog";
+import { VideoComp } from "./_lib/video/video-client";
 
+const eventBusKey = 'pr-webrtc';
 const chatId = 'pr-webrtc';
 
-type StartPageResult = 'registerClicked' | 'loginClicked';
-
-interface LoginData {
-    user: string;
-    passwd: string;
+function fireEvent<E = any>(e: E) {
+    getEventBus(eventBusKey).publish(e);
 }
 
-type MainEvent = {
-    type: 'loggedOut';
-} | {
-    type: 'userEntered';
-    name: string;
-} | {
-    type: 'userLeft';
-    name: string;
-} | {
-    type: StartPageResult;
-} | {
-    type: 'cancelClicked';
-} | {
-    type: 'loginData';
-    loginData: LoginData | null;
-}
-
-export default function Page() {
-    const accumulatedFetching = useRef<AccumulatedFetching | null>(null);
-    // const startPageResolve = useRef<((res: StartPageResult) => void) | null>(null);
-    // const loginDataResolve = useRef<((res: LoginData | null) => void) | null>(null);
-    const loginInputRef = useRef<HTMLInputElement | null>(null);
-    // const chatLinesRef = useRef<HTMLDivElement | null>(null);
-    const chatInputRef = useRef<HTMLInputElement | null>(null);
-    const onLogoutRef = useRef<(() => void) | null>(null);
-    const mainEventBus = useRef<EventBus<MainEvent> | null>(null)
-    function getMainEventBus() {
-        if (mainEventBus.current == null) {
-            mainEventBus.current = new EventBus<MainEvent>('main');
-        }
-        return mainEventBus.current;
-    }
-    const contactingServerBus = useRef<EventBus<ContactingServerEvent> | null>(null);
-    function getContactingServerBus() {
-        if (contactingServerBus.current == null) {
-            contactingServerBus.current = getEventBus<ContactingServerEvent>(CONTACTING_SERVER_EVENT_BUS_KEY);
-        }
-        return contactingServerBus.current;
-    }
-    const [error, setError] = useState<string>('');
-    const [startPage, setStartPage] = useState<boolean>(false);
-    const [inputRegisterData, setInputRegisterData] = useState<boolean>(false);
-    const [inputLoginData, setInputLoginData] = useState<boolean>(false);
-    const [loginName, setLoginName] = useState<string>('');
-    const [loginPasswd, setLoginPasswd] = useState<string>('');
-    const [regularViews, setRegularViews] = useState<boolean>(false);
-    // const [userListState, setUserListState] = useState<UserListState>({
-    //     users: [],
-    //     selected: -1
-    // });
-    const [videoCallActive, setVideoCallActive] = useState<boolean>(false);
-    // const [chatLines, setChatLines] = useState<ChatLine[]>([]);
-    const [chatInputFrozen, setChatInputFrozen] = useState<boolean>(true);
-    const [connectionError, setConnectionError] = useState<boolean>(false);
-    const [connectionErrorConfirmed, setConnectionErrorConfirmed] = useState<boolean>(false);
-    const [loginResultData, setLoginResultData] = useState<LoginResultData | null>(null);
-
-    const chat = useChat({ chatId: chatId, timeoutMs: 2000 })
-
-
-    // const setContactingServer = (contactingServer: boolean) => () => {
-    //     contactingServerBus.publish({
-    //         contactingServer: contactingServer
-    //     })
-
-    //     if (contactingServer) {
-    //         const to = setTimeout(() => {
-    //             contactingServerBus.publish({
-    //                 contactingServer: false
-    //             })
-    //         }, 2000);
-
-    //         return () => {
-    //             clearTimeout(to);
-    //         }
-    //     }
-    // }
-
-    useEffect(() => {
-        const abortController = new FixedAbortController();
-        accumulatedFetching.current = new AccumulatedFetching(
-            '/api/webRTC',
-            {
-                fetchError: (error) => {
-                    setChatInputFrozen(true);
-                    chat.addErrorLine(error);
-                    setConnectionError(true);
-                    setConnectionErrorConfirmed(false);
-                }
-            },
-            abortController
-        )
-
-        const subscription = getMainEventBus().subscribe();
-
-        let user: string | null = null;
-        let passwd: string | null = null;
-        let token: string | null = null;
-        // async function loginReq(): Promise<boolean> {
-        //     console.log('loginReq');
-        //     if (accumulatedFetching.current == null) throw new Error('accumulatedFetching cannot be null here?!');
-        //     if (user == null || passwd == null) throw new Error('user or passwd null');
-        //     const req: LoginReq = {
-        //         type: 'login',
-        //         chatId: chatId,
-        //         user: user,
-        //         passwd: passwd
-        //     }
-        //     if (accumulatedFetching.current == null) throw new Error('accumulatedFetching cannot be null here?!');
-
-        //     try {
-        //         const resp = await accumulatedFetching.current.push<LoginReq, LoginResp>(req);
-        //         switch (resp.type) {
-        //             case 'success':
-        //                 return true;
-        //             case 'authenticationFailed':
-        //                 setError('Wrong user or password!');
-        //                 return false;
-        //             case 'error':
-        //                 setError(`Unexpected server error during login: "${resp.error}"`);
-        //                 return false;
-        //         }
-        //     } finally {
-        //         contactingServerBus.publish({
-        //             contactingServer: false
-        //         })
-
-        //     }
-        // }
-
-
-        async function videoCalls() {
-            console.warn('nyi');
-            // throw new Error('nyi');
-        }
-
-        async function logout() {
-            return new Promise<void>(resolve => {
-                onLogoutRef.current = async () => {
-                    if (user == null) throw new Error('user null?!');
-                    if (token == null) throw new Error('token null?!');
-                    const req: LogoutReq = {
-                        type: 'logout',
-                        chatId: chatId,
-                        user: user,
-                        token: token
-                    }
-                    let resp: ApiResp<LogoutResp>;
-
-                    try {
-                        getContactingServerBus().publish({
-                            contactingServer: true
-                        })
-                        if (accumulatedFetching.current == null) throw new Error('accumulatedFetching.current null?!');
-                        resp = await accumulatedFetching.current.push<LogoutReq, LogoutResp>(req);
-
-                    } finally {
-                        getContactingServerBus().publish({
-                            contactingServer: false
-                        })
-                    }
-                    switch (resp.type) {
-                        case 'success':
-                            getMainEventBus().publish({
-                                type: 'loggedOut'
-                            });
-                            finish();
-                            break;
-                        case 'error':
-                            setError(resp.error);
-                            break;
-                    }
-                }
-
-                function finish() {
-                    abortController.signal.removeEventListener('abort', finish);
-                    resolve();
-                }
-
-                abortController.signal.addEventListener('abort', finish);
-            })
-        }
-
-        async function mergeLoginReq(): Promise<void> {
-
-            {
-                if (accumulatedFetching.current == null) throw new Error('accumulatedFetching cannot be null here?!');
-                if (user == null || passwd == null) throw new Error('user or passwd null');
-                const req: LoginReq = {
-                    type: 'login',
-                    chatId: chatId,
-                    user: user,
-                    passwd: passwd
-                }
-                getContactingServerBus().publish({
-                    contactingServer: true
-                })
-                let resp: ApiResp<LoginResp>;
-                try {
-                    if (accumulatedFetching.current == null) throw new Error('accumulatedFetching cannot be null here?!');
-                    resp = await accumulatedFetching.current.push<LoginReq, LoginResp>(req);
-                } finally {
-                    getContactingServerBus().publish({
-                        contactingServer: false
-                    })
-
-                }
-                switch (resp.type) {
-                    case 'success':
-                        localStorage.setItem('user', user);
-                        localStorage.setItem('passwd', passwd);
-                        token = resp.token;
-                        setRegularViews(true);
-                        setChatInputFrozen(false);
-                        chat.onStart(accumulatedFetching.current, {
-                            user: user,
-                            sessionKey: resp.token,
-                            initialUsers: resp.users,
-                            eventIdForUsers: resp.eventIdForUsers,
-                        }, function () {
-                            {
-                                alert('You have been logged out. Probably, you or sb else who knows your password have logged in on another device or browser tab?');
-                                getMainEventBus().publish({
-                                    type: 'loggedOut'
-                                });
-
-                            }
-                        });
-                        // actions "present user list" and "chatting" happen in the custom hook "useChat".
-                        const videoCallsProm = videoCalls();
-                        const logoutProm = logout();
-
-                        await logoutProm;
-                        chat.onStop();
-                        setRegularViews(false);
-                        mergeStartPage();
-                        break;
-                    case 'authenticationFailed':
-                        setError('Wrong user or password!');
-                        mergeInputLoginData();
-                        break;
-                    case 'error':
-                        setError(`Unexpected server error during login: "${resp.error}"`);
-                        mergeInputLoginData();
-                        break;
-                }
-
-            }
-        }
-
-        async function registerNewUser(): Promise<boolean> {
-            setInputRegisterData(true);
-            try {
-                while (true) {
-                    const e = await subscription.nextEventWith(e => e.type === 'loginData')
-                    if (e.type !== 'loginData') throw new Error('Bug in nextEventWith: e=' + JSON.stringify(e));
-                    const loginData = e.loginData;
-                    if (loginData == null) {
-                        return false;
-                    }
-                    const req: RegisterReq = {
-                        user: loginData.user,
-                        passwd: loginData.passwd
-                    }
-                    try {
-                        const resp = await userRegisterFetch(req);
-                        switch (resp.type) {
-                            case 'error':
-                                setError(resp.error);
-                                break;
-                            case 'nameNotAvailable':
-                                setError(`User name ${loginData.user} not available.`);
-                                break;
-                            case 'success':
-                                alert('Registration successful.')
-                                user = loginData.user;
-                                passwd = loginData.passwd;
-                                localStorage.setItem('user', user);
-                                localStorage.setItem('passwd', passwd);
-                                return true;
-                            default:
-                                // never
-                                throw new Error('Never here?!');
-                        }
-                    } catch (reason) {
-                        if (reason instanceof Error) {
-                            if (reason.message === 'Failed to fetch') {
-                                setError('No connection to the server.');
-                            } else {
-                                setError(`Unknown server error(${reason.name}): ${reason.message}`);
-                            }
-                        } else {
-                            console.warn('Caught unknown in apiFetchPost', reason);
-                            setError('Caught unknown in apiFetchPost: ' + JSON.stringify(reason));
-                        }
-                    }
-    
-                }
-
-            } catch (reason) {
-                console.warn('caught', reason);
-                throw reason;
-            } finally {
-                setInputRegisterData(false);
-            }
-        }
-
-        async function mergeStartPage(): Promise<void> {
-            setStartPage(true);
-            const e = await subscription.nextEventWith(e => e.type === 'registerClicked' || e.type === 'loginClicked');
-            if (e.type !== 'registerClicked' && e.type !== 'loginClicked') throw new Error('Bug in nextEventWith: e=' + JSON.stringify(e));
-
-            switch (e.type) {
-                case 'registerClicked':
-                    setStartPage(false);
-                    if (await registerNewUser()) {
-                        mergeInputLoginData();
-                    } else {
-                        mergeStartPage();
-                    }
-                    break;
-                case 'loginClicked':
-                    setStartPage(false);
-                    mergeInputLoginData();
-                    break;
-            }
-        }
-
-        async function mergeInputLoginData(): Promise<void> {
-            setInputLoginData(true);
-            try {
-                do {
-                    const e = await subscription.nextEvent();
-                    switch (e.type) {
-                        case 'loginData':
-                            setInputLoginData(false);
-                            const loginData = e.loginData;
-                            if (loginData == null) {
-                                // login canceled
-                                sessionStorage.removeItem('callee');
-                                return mergeStartPage();
-                            } else {
-                                user = loginData.user;
-                                passwd = loginData.passwd;
-                                return mergeLoginReq();
-                            }
-                        default:
-                            break;
-                    }
-                } while (true);
-            } finally {
-            }
-        }
-
-        /**
-         * For the following code, see activity diagram:
-         * WebRTC Demo.vpp://diagram/hJKGxrGD.AACAQod
-         */
-        async function onStart(): Promise<void> {
-            try {
-                const callee = sessionStorage.getItem('callee');
-                user = localStorage.getItem('user');
-                passwd = localStorage.getItem('passwd');
-                if (callee != null) {
-
-                    if (user != null && passwd != null) {
-                        await mergeLoginReq();
-                    } else {
-                    }
-                } else {
-                    await mergeStartPage();
-                }
-
-            } catch (reason) {
-                if (abortController.signal.aborted) return;
-                console.warn('caught in onStart', reason);
-            }
-        }
-
-        onStart();
-
-        return () => {
-            subscription.unsubscribe();
-            abortController.abort();
-            if (accumulatedFetching.current == null) {
-                throw new Error('Unexpected: accumulatedFetching.current null');
-            }
-            // accumulatedFetching.current.close(); // because abortController aborted
-            accumulatedFetching.current = null;
-        }
-        // eslint-disable-next-line
-    }, [])
-
-    function fireEvent(e: MainEvent) {
-        getMainEventBus().publish(e);
-    }
-
-    useEffect(() => {
-        if (inputRegisterData || inputLoginData) {
-            loginInputRef.current?.focus();
-        }
-    }, [inputRegisterData, inputLoginData])
+function StartPageComp(props: StartPageProps) {
 
     const [imgWidth, setImgWidth] = useState<number>(300);
 
@@ -451,178 +46,917 @@ export default function Page() {
         }
     }, [])
 
-    function onRegisterKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-        if (e.key === 'Enter') {
-            onLoginDataOk();
-        }
-    }
+    return (
 
-    function onLoginDataOk() {
-        fireEvent({
-            type: 'loginData',
-            loginData: {
-                user: loginName,
-                passwd: loginPasswd
-            }
+        <div className={`${styles.startPage} ${styles.flexColumn}`}>
+            <Image className={styles.img} src='/Dekobildchen.svg' alt='Image for video calls as decoration' width={imgWidth} height={imgWidth * 500 / 750} priority /><br />
+            <p className={styles.imgAttribute}><a href="https://www.freepik.com/free-vector/video-conferencing-concept-landing-page_5155828.htm#query=video%20call&position=13&from_view=search&track=ais&uuid=d88bd399-7c39-4f67-8c62-d2715f65f654">Image by pikisuperstar</a> on Freepik</p>
+
+            <p>
+                This is mainly for demonstration and my personal usage. So, registration is without the necessity
+                to provide any personal data. Not even an email address is required.
+                Just, choose a user name and a password. {'That\'s'} it. (At least as long as the usage is within
+                reasonable borders... ;-)
+            </p>
+            <div className={styles.buttonRow}>
+                {/* <Link className={styles.register} href='/register'>Register now</Link>
+    <div>and then</div>
+    <Link className={styles.login} href='/login'>Login</Link> */}
+                <button onClick={() => fireEvent<RegisterClicked>({ type: 'RegisterClicked' })} className={styles.redButton}>Register now</button>
+                <p>and then</p>
+                <button className={styles.greenButton} onClick={() => fireEvent<LoginClicked>({ type: 'LoginClicked' })}>Login</button>
+            </div>
+        </div>
+    )
+}
+
+function LoginDlgComp(props: LoginOrRegisterDlgProps) {
+    const loginInputRef = useRef<HTMLInputElement>(null);
+    const [loginName, setLoginName] = useState<string>(props.user);
+    const [loginPasswd, setLoginPasswd] = useState<string>(props.passwd);
+
+    function onOk() {
+        fireEvent<LoginOrRegisterOk>({
+            type: 'LoginOrRegisterOk',
+            user: loginName,
+            passwd: loginPasswd
         })
     }
 
-    function onLoginDataCancel() {
-        fireEvent({
-            type: 'loginData',
-            loginData: null
-        });
+    function onCancel() {
+        fireEvent<CancelClicked>({ type: 'CancelClicked' })
     }
 
-    function onUserClick(idx: number) {
-        chat.onUserClick(idx);
-        // if (userListState.selected === idx) {
-        //     setUserListState({
-        //         ...userListState,
-        //         selected: -1
-        //     })
-        // } else {
-        //     setUserListState({
-        //         ...userListState,
-        //         selected: idx
-        //     })
-        // }
-    }
-
-    const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
+    function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
         if (e.key === 'Enter') {
-            chat.onSend();
+            onOk();
         }
     }
 
-    // TODO small if currently video call ongoing
-    const small = false;
+    return (
+        <div className={styles.flexColumn}>
+            <h2>Login (as existing user)</h2>
+            {props.error != null && <p className={styles.errorParagraph}>{props.error}</p>}
+            <label>User</label>
+            <input ref={loginInputRef} value={loginName} onChange={(e) => {
+                setLoginName(e.target.value)
+            }} onKeyDown={(e) => onKeyDown(e)} />
+            <label>Password</label>
+            <input type='password' value={loginPasswd} onChange={(e) => {
+                setLoginPasswd(e.target.value);
+            }} onKeyDown={(e) => onKeyDown(e)} />
+            <ButtonRow>
+                <button className={styles.greenButton} onClick={onOk}>Login</button>
+                <button className={styles.redButton} onClick={onCancel}>Cancel</button>
+            </ButtonRow>
+        </div>
+
+    )
+}
+
+function RegisterDlgComp(props: LoginOrRegisterDlgProps) {
+    const loginInputRef = useRef<HTMLInputElement>(null);
+    const [loginName, setLoginName] = useState<string>(props.user)
+    const [loginPasswd, setLoginPasswd] = useState<string>(props.passwd)
+
+
+    function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+        if (e.key === 'Enter') {
+            onOk();
+        }
+    }
+
+    function onOk() {
+        fireEvent<LoginOrRegisterOk>({
+            type: 'LoginOrRegisterOk',
+            user: loginName,
+            passwd: loginPasswd
+        })
+
+    }
+
+    function onCancel() {
+        fireEvent<CancelClicked>({
+            type: 'CancelClicked',
+        })
+    }
 
     return (
+        <div className={styles.flexColumn}>
+            <h2>Register as a new user</h2>
+            {props.error != null && <p className={styles.errorParagraph}>{props.error}</p>}
+            <label>User</label>
+            <input ref={loginInputRef} value={loginName} onChange={(e) => {
+                setLoginName(e.target.value)
+            }} onKeyDown={(e) => onKeyDown(e)} />
+            <label>Password</label>
+            <input type='password' value={loginPasswd} onChange={(e) => {
+                setLoginPasswd(e.target.value);
+            }} onKeyDown={(e) => onKeyDown(e)} />
+            <ButtonRow>
+                <button className={styles.greenButton} onClick={onOk}>Register</button>
+                <button className={styles.redButton} onClick={onCancel}>Cancel</button>
+            </ButtonRow>
+        </div>
+
+    )
+}
+
+function standardCatching(prom: Promise<unknown>) {
+    prom.catch((reason: any) => {
+        if (reason.name !== 'AbortError') {
+            console.error(reason);
+        } else {
+            console.log('silently ignored', reason);
+        }
+    });
+}
+
+function ShowFetchErrorDuringLoginComp({ error }: { error: string }) {
+    return (
+        <div className={styles.dlg}>
+            <h3>Error during login</h3>
+            <p className={styles.errorParagraph}>{error}</p>
+            <button onClick={() => fireEvent<TryAgainClicked>({
+                type: 'TryAgainClicked',
+            })}>Try again</button>
+        </div>
+    )
+}
+
+function ButtonRow({ children }: PropsWithChildren<{}>) {
+    return (
+        <div className={styles.buttonRow}>
+            {children}
+        </div>
+    )
+}
+
+function AuthFailedComp({ onClose, onUseHere }: { onClose: () => void, onUseHere: () => void }) {
+    return (
+        <div className={styles.dlg}>
+            <p>
+                pr-webRTC has been opened in another window/tab or on another device. Click &quot;use here&quot; to to use pr-webRTC in this window/tab.
+            </p>
+            <ButtonRow>
+                <button className={styles.redButton} onClick={onClose}>Close</button>
+                <button className={styles.greenButton} onClick={onUseHere}>Use here</button>
+            </ButtonRow>
+        </div>
+    )
+}
+
+function SetupPushComp({ error, onOk, onCancel, onTryAgain }: { error: string | null; onOk: () => void; onCancel: () => void; onTryAgain: () => void }) {
+    return (
+        <div className={styles.dlg}>
+            <h2>Setup push notifications</h2>
+            {
+                error == null ?
+                    <>
+                        <p>If you want to be notified by a push message in the browser on a call, then click &quot;OK&quot;. This is only possible if you also confirm the push permission that the browser will probably ask you, afterwards.</p>
+                        <ButtonRow>
+                            <button onClick={onOk}>OK</button>
+                            <button onClick={onCancel}>Cancel</button>
+                        </ButtonRow>
+                    </>
+                    :
+                    <>
+                        <p className={styles.errorParagraph}>Error: {error}</p>
+                        <p>Maybe you have forbidden push notifications for this site? Then, please change the browser settings to &quot;Allow&quot; or &quot;Ask&quot;, and then click &quot;Try again&quot;.</p>
+                        <ButtonRow>
+                            <button onClick={onTryAgain}>Try again</button>
+                            <button onClick={onCancel}>Cancel</button>
+                        </ButtonRow>
+                    </>
+            }
+        </div>
+    )
+}
+
+function AwaitPushComp({ onCancel }: { onCancel: () => void }) {
+    return (
+        <div className={styles.dlg}>
+            <h4>Pausing until push notification</h4>
+            <p>The server has been set up to wake this site up on a call.
+                Waiting for a call...</p>
+            <ButtonRow>
+                <button onClick={onCancel}>Cancel</button>
+            </ButtonRow>
+        </div>
+    )
+}
+
+function FetchErrorComp({ error }: { error: string }) {
+    return (
+        <div className={styles.fetchError}>
+            <p className={styles.errorParagraph}>{error}</p>
+            <ButtonRow>
+                <button onClick={() => fireEvent<TryAgainClicked>({
+                    type: 'TryAgainClicked',
+                })
+                }>Try again</button>
+            </ButtonRow>
+        </div>
+    )
+}
+
+interface VideoConfigInputProps {
+    name: 'send' | 'receive';
+    value: VideoConfigValue;
+    checked: boolean;
+    onChange(e: ChangeEvent<HTMLInputElement>): void;
+}
+function VideoConfigInputComp(props: VideoConfigInputProps) {
+    const id = `${props.name}-${props.value}`
+    return (
         <>
-            <div className={styles.top}>
-                {
-                    regularViews &&
-                    <div>
-                        <button className={`${styles.redButton} ${styles.logout}`} onClick={() => {
-                            if (onLogoutRef.current != null) {
-                                onLogoutRef.current();
-                            }
-                        }}>Logout</button>
-                    </div>
-                }
+            <input type='radio' id={id} name={props.name} value={props.value} checked={props.checked} onChange={props.onChange} />
+            <label htmlFor={id}>{props.value}</label>
+        </>
+    )
+}
 
-                <div className={styles.header}>
-                    <h4>pr-webRTC</h4><h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
-                </div>
+interface VideoConfigProps {
+    initialSendVideo: VideoConfigValue;
+    initialReceiveVideo: VideoConfigValue;
+}
+function VideoConfigComp({ initialSendVideo, initialReceiveVideo }: VideoConfigProps) {
+    const [sendVideo, setSendVideo] = useState<VideoConfigValue>(initialSendVideo)
+    const [receiveVideo, setReceiveVideo] = useState<VideoConfigValue>(initialReceiveVideo)
+
+    function onSendChange(e: ChangeEvent<HTMLInputElement>) {
+        const val = VideoConfigValue.check(e.target.value)
+        setSendVideo(val)
+        fireEvent<ConfigSendVideoChanged>({
+            type: 'ConfigSendVideoChanged',
+            sendVideo: val
+        })
+    }
+
+    function onReceiveChange(e: ChangeEvent<HTMLInputElement>) {
+        const val = VideoConfigValue.check(e.target.value)
+        setReceiveVideo(val)
+        fireEvent<ConfigReceiveVideoChanged>({
+            type: 'ConfigReceiveVideoChanged',
+            receiveVideo: val
+        })
+    }
+
+    function checked(name: 'send' | 'receive', value: VideoConfigValue): boolean {
+        switch (name) {
+            case 'send': return sendVideo === value
+            case 'receive': return receiveVideo === value
+            default: assert(false);
+        }
+    }
+
+    function generateInput(name: 'send' | 'receive', value: VideoConfigValue) {
+        const id = `${name}-${value}`
+        return (
+            <div key={id}>
+                <input className={styles.videoConfigInp} aria-roledescription={value} type='radio' id={id} name={name} value={value} checked={checked(name, value)} onChange={name === 'send' ? onSendChange : onReceiveChange} />
+                <label className={styles.videoConfigLabel} htmlFor={id}>{value}</label>
             </div>
-            <div className={styles.main}>
-                {
-                    startPage &&
-                    <div className={styles.startPage}>
-                        <Image className={styles.img} src='/Dekobildchen.svg' alt='Image for video calls as decoration' width={imgWidth} height={imgWidth * 500 / 750} priority /><br />
-                        <div className={styles.imgAttribute}><a href="https://www.freepik.com/free-vector/video-conferencing-concept-landing-page_5155828.htm#query=video%20call&position=13&from_view=search&track=ais&uuid=d88bd399-7c39-4f67-8c62-d2715f65f654">Image by pikisuperstar</a> on Freepik</div>
+        )
+    }
 
-                        <p>
-                            This is mainly for demonstration and my personal usage. So, registration is without the necessity
-                            to provide any personal data. Not even an email address is required.
-                            Just, choose a user name and a password. {'That\'s'} it. (At least as long as the usage is within
-                            reasonable borders... ;-)
-                        </p>
-                        <div className={styles.buttonRow}>
-                            {/* <Link className={styles.register} href='/register'>Register now</Link>
-                    <div>and then</div>
-                    <Link className={styles.login} href='/login'>Login</Link> */}
-                            <button onClick={() => fireEvent({ type: 'registerClicked' })} className={styles.redButton}>Register now</button>
-                            <p>and then</p>
-                            <button className={styles.greenButton} onClick={() => fireEvent({ type: 'loginClicked' })}>Login</button>
+    function generateFieldSet(name: 'send' | 'receive') {
+        const options = VideoConfigValue.alternatives
+        return (
+            <fieldset className={styles.videoConfigSet}>
+                <legend>{name} video</legend>
+                {options.map(option => generateInput(name, option.value))}
+            </fieldset>
+        )
+    }
+
+    return (
+        <fieldset className={styles.videoConfigSet}>
+            <legend>Video configuration</legend>
+            {generateFieldSet('send')}
+            {generateFieldSet('receive')}
+        </fieldset>
+    )
+}
+
+
+function DecideIfWithVideoDlgComp(props: DecideIfWithVideoProps) {
+    const eventBus = useEventBus(props.eventBusKey)
+
+
+    function fireEvent<T = any>(e: T) {
+        eventBus.publish(e);
+    }
+
+    const sendChanged = (remoteUser: string) => () => {
+        fireEvent<SendVideoChanged>({
+            type: 'SendVideoChanged',
+            remoteUser: remoteUser,
+            send: !props.decisions[remoteUser].withVideo.send
+        })
+    }
+
+    const receiveChanged = (remoteUser: string) => () => {
+        fireEvent<ReceiveVideoChanged>({
+            type: 'ReceiveVideoChanged',
+            remoteUser: remoteUser,
+            receive: !props.decisions[remoteUser].withVideo.receive
+        })
+    }
+
+    return (
+        <div className={styles.dlg}>
+            <h4>Video Settings For Connections</h4>
+            {
+                Object.entries(props.decisions).map(([remoteUser, decision]) => (
+                    <div key={remoteUser} className={styles.withVideo}>
+                        <div>
+                            <input id={`sendVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.send} onChange={sendChanged(remoteUser)} />
+                            <label htmlFor={`sendVideo-${remoteUser}`}>Offer to <b>send</b> video to <b>{remoteUser}</b>
+                            </label>
+                        </div>
+                        <div>
+                            <input id={`receiveVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.receive} onChange={receiveChanged(remoteUser)} />
+                            <label htmlFor={`receiveVideo-${remoteUser}`}>Offer to <b>receive</b> video from <b>{remoteUser}</b></label>
                         </div>
                     </div>
+                ))
+            }
+            <ButtonRow>
+                <button onClick={() => fireEvent<OkClicked>({
+                    type: 'OkClicked',
+                })
+                }>OK</button>
+                <button onClick={() => fireEvent<CancelClicked>({
+                    type: 'CancelClicked',
+                })
+                }>Cancel</button>
+            </ButtonRow>
+        </div>
+    )
+}
 
+function HangUpDlgComp(props: HangUpProps) {
+    const initialSelected = useCallback(() => {
+        return props.remoteUsers.map((remoteUser, i) => i)
+    }, [props.remoteUsers])
+    const [selected, setSelected] = useState<number[]>(initialSelected());
+    function onUserClick(idx: number) {
+        setSelected(d => {
+            if (d.indexOf(idx) === -1) {
+                return [...d, idx].sort()
+            } else {
+                return d.filter(val => val !== idx)
+            }
+        })
+    }
+    return (
+        <div className={styles.dlg}>
+            <h4>Hang Up ?</h4>
+            <MultiSelectChatUserListComp label='Select the connections to hang up:' emptyLabel='No active connections' small={true} userListState={({
+                users: props.remoteUsers.map(remoteUser => ({name: remoteUser})),
+                selected: selected
+            })} onClick={onUserClick} onKey={(e) => {
+                console.error('nyi');
+            }} />
+            <ButtonRow>
+                <button onClick={() => fireEvent<HangUp>({
+                    type: 'HangUp',
+                    remoteUsers: selected.map(idx => props.remoteUsers[idx])
+                })}>OK</button>
+                <button onClick={() => fireEvent<CancelClicked>({
+                    type: 'CancelClicked',
+                })}>Cancel</button>
+            </ButtonRow>
+        </div>
+    )
+}
+
+function ConnectionComp(props: ConnectionProps) {
+    return (
+        <div className={styles.connectionComp}>
+            {props.msg != null ? <p>{props.msg}</p> : <span>{props.remoteUser}</span>}
+            {props.stream != null && <VideoComp mediaStream={props.stream as MediaStream} />}
+        </div>
+    )
+}
+
+const ConnectionsProps = rt.Record({
+    connections: rt.Dictionary(ConnectionProps, rt.String)
+})
+type ConnectionsProps = rt.Static<typeof ConnectionsProps>
+
+// interface ConnectionsProps {
+//     connections: {
+//         [remoteUser: string]: ConnectionProps
+//     }
+// }
+
+function ConnectionsComp(props: ConnectionsProps) {
+    console.log('ConnectionsComp: props.connections', props.connections)
+    const valList = Object.values(props.connections)
+    console.log('ConnectionsComp: valList', valList)
+    return (
+        <div>
+            <p className={styles.comment}></p>
+            {
+                valList.map(c => (
+                    <ConnectionComp key={c.remoteUser} {...c} />
+                ))
+            }
+        </div>
+    )
+}
+
+function ReceivedCallComp(props: ReceivedCallProps) {
+    function sendChanged() {
+        fireEvent<SendVideoChanged>({
+            type: 'SendVideoChanged',
+            remoteUser: props.remoteUser,
+            send: !props.withVideo.send
+        })
+    }
+    function receiveChanged() {
+        fireEvent<ReceiveVideoChanged>({
+            type: 'ReceiveVideoChanged',
+            remoteUser: props.remoteUser,
+            receive: !props.withVideo.receive
+        })
+    }
+
+    return (
+        <div className={styles.dlg}>
+            <h4>{props.remoteUser} calling!</h4>
+            <div key={props.remoteUser} className={styles.withVideo}>
+                <div>
+                    <input id={`sendVideo-${props.remoteUser}`} type='checkbox' checked={props.withVideo.send} onChange={sendChanged} />
+                    <label htmlFor={`sendVideo-${props.remoteUser}`}>Offer to <b>send</b> video to <b>{props.remoteUser}</b>
+                    </label>
+                </div>
+                <div>
+                    <input id={`receiveVideo-${props.remoteUser}`} type='checkbox' checked={props.withVideo.receive} onChange={receiveChanged} />
+                    <label htmlFor={`receiveVideo-${props.remoteUser}`}>Offer to <b>receive</b> video from <b>{props.remoteUser}</b></label>
+                </div>
+            </div>
+            <ButtonRow>
+                <button className={styles.accept} title='Accept Call' onClick={() => {
+                    fireEvent<AcceptClicked>({
+                        type: 'AcceptClicked',
+                        remoteUser: props.remoteUser,
+                    });
+                }}></button>
+                <button className={styles.reject} title='Reject Call' onClick={() => {
+                    fireEvent<HangUpClicked>({
+                        type: 'HangUpClicked',
+                        remoteUser: props.remoteUser
+                    });
+                    remoteUser: props.remoteUser
+                }}></button>
+
+            </ButtonRow>
+        </div>
+    )
+}
+
+const busyTardyFlagProps = {
+    initialValue: false, timeoutDelays: {
+        minInvisible: 0,
+        minVisible: 400,
+        setToVisible: 300,
+        unsetToInvisible: 0
+    }
+}
+
+const initialChatProps = {
+    chatId: chatId,
+    timeoutMs: 2000
+}
+
+function initialConnectionsProps(): ConnectionsProps {
+    return {
+        connections: {}
+    }
+}
+
+export default function Page() {
+    const [startPageProps, setStartPageProps] = useState<StartPageProps | null>(null);
+    const [loginDlgProps, setLoginDlgProps] = useState<LoginOrRegisterDlgProps | null>(null);
+    const [registerDlgProps, setRegisterDlgProps] = useState<LoginOrRegisterDlgProps | null>(null);
+    // const [busy, setBusy] = useState<string | null>(null);
+    const [fetchErrorDuringLogin, setFetchErrorDuringLogin] = useState<string | null>(null);
+    const [regularPageProps, setRegularPageProps] = useState<RegularPageProps | null>(null);
+    const [chat, chatOnStart, chatOnInputChange, chatOnSend, chatOnUserClick, chatAddErrorLine, chatOnStop] = useMultiSelectChat(initialChatProps);
+    const [callActive, setCallActive] = useState<boolean>(false);
+    // const [callButtonText, setCallButtonText] = useState<string>('Call');
+    const [cameraTestButtonText, setCameraTestButtonText] = useState<string | null>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const chatInputRef = useRef<HTMLInputElement | null>(null);
+    const [authFailedProps, setAuthFailedProps] = useState<EmptyPropsOrNull>(null);
+    const [setupPushProps, setSetupPushProps] = useState<SetupPushProps | null>(null);
+    const [awaitPushProps, setAwaitPushProps] = useState<EmptyPropsOrNull>(null);
+    const [decideIfWithVideoProps, setDecideIfWithVideoProps] = useState<DecideIfWithVideoProps | null>(null);
+    const tryAgainRef = useRef<HTMLButtonElement>(null);
+    const [busyResult, setBusy] = useTardyFlag(/* busyTardyFlagProps */{
+        initialValue: false, timeoutDelays: {
+            minInvisible: 0,
+            minVisible: 400,
+            setToVisible: 300,
+            unsetToInvisible: 0
+        }
+    })
+    const busyVisible = busyResult.value;
+    const [busyComment, setBusyComment] = useState<string | null>(null);
+    const [modalMsg, setModalMsg] = useState<string | null>(null);
+    const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+    const [connectionsProps, setConnectionsProps] = useState<ConnectionsProps>(initialConnectionsProps())
+    const [receivedCallProps, setReceivedCallProps] = useState<ReceivedCallProps | null>(null);
+    const [hangUpProps, setHangUpProps] = useState<HangUpProps | null>(null);
+
+
+    useEffect(() => {
+        console.log('DEBUG EFFECT BECAUSE setBusy CHANGED!', setBusy);
+    }, [setBusy])
+
+    useEffect(() => {
+        console.log('starting main effect with routeActivity()')
+        const abortController = new FixedAbortController();
+        const eventBus = getEventBus(eventBusKey);
+        const throwIfAborted = () => abortController.signal.throwIfAborted();
+        const accumulatedFetching = new AccumulatedFetching(
+            '/api/webRTC',
+            {
+                fetchError: (error) => {
+                    fireEvent<FetchError>({
+                        type: 'FetchError',
+                        error: error
+                    })
                 }
-                {
-                    inputRegisterData &&
-                    <div className={styles.flexColumn}>
-                        <h2>Register as a new user</h2>
-                        <label>User</label>
-                        <input ref={loginInputRef} value={loginName} onChange={(e) => {
-                            setLoginName(e.target.value)
-                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
-                        <label>Password</label>
-                        <input type='password' value={loginPasswd} onChange={(e) => {
-                            setLoginPasswd(e.target.value);
-                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
-                        <button className={styles.greenButton} onClick={onLoginDataOk}>Register</button>
-                        <button className={styles.redButton} onClick={onLoginDataCancel}>Cancel</button>
+            },
+            abortController
+        );
+
+
+        async function handleEvents() {
+            const subscr = eventBus.subscribe();
+            try {
+                // TODO add ReceivedCallDlg and ReceivedCallComp and so on
+                const MyEvents = rt.Union(StartPage, LoginDlg, RegisterDlg, Busy, RegularPage, ChatStart, ChatStop, /* SetCallButtonText, */
+                    SetCameraTestButton,
+                    SetFetchErrorState, AuthFailedDlg, ChatAddErrorLine, ChatAddHintLine, FetchingSetInterrupted, SetupPushDlg, AwaitPushDlg, DecideIfWithVideoDlg,
+                    SetCallActive, ModalDlg, LocalMediaStream, HandlingFetchError, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, HangUpDlg)
+                type MyEvents = rt.Static<typeof MyEvents>
+
+
+                while (true) {
+                    throwIfAborted();
+                    const e: any = await subscr.nextEvent();
+                    throwIfAborted();
+                    console.log('handleEvents got', ('type' in e ? e.type : ''), e);
+                    if (MyEvents.guard(e)) {
+                        switch (e.type) {
+                            case 'StartPage':
+                                setStartPageProps(e.props);
+                                break;
+                            case 'LoginDlg':
+                                console.log('setting loginDlgProps to ', e.props);
+                                setLoginDlgProps(e.props);
+                                break;
+                            case 'RegisterDlg':
+                                setRegisterDlgProps(e.props);
+                                break;
+                            case 'Busy':
+                                setBusy(e.comment != null);
+                                if (e.comment != null) setBusyComment(e.comment);
+                                break;
+                            // case 'ShowFetchErrorDuringLogin':
+                            //     setFetchErrorDuringLogin(e.error);
+                            //     break;
+                            case 'RegularPage':
+                                setRegularPageProps(e.props);
+                                break;
+                            // case 'SetCallButtonText':
+                            //     setCallButtonText(e.text);
+                            //     break;
+                            case 'SetCameraTestButton':
+                                setCameraTestButtonText(e.label)
+                                break;
+                            case 'HandlingFetchError':
+                                console.log('HandlingFetchError', e.error);
+                                setFetchError(e.error);
+                                break;
+                            case 'ChatStart':
+                                chatOnStart(accumulatedFetching, e.loginResultData, () => {
+                                    fireEvent<AuthFailed>({
+                                        type: 'AuthFailed',
+                                    })
+                                })
+                                break;
+                            case 'AuthFailedDlg':
+                                setAuthFailedProps(e.props);
+                                break;
+                            case 'ChatAddErrorLine':
+                                chatAddErrorLine(e.error);
+                                break;
+                            case 'ChatAddHintLine':
+                                chatAddErrorLine(e.hint);
+                                break;
+                            case 'FetchingSetInterrupted':
+                                accumulatedFetching.setInterrupted(e.interrupted);
+                                break;
+                            case 'ChatStop':
+                                chatOnStop();
+                                break;
+                            case 'SetupPushDlg':
+                                setSetupPushProps(e.props);
+                                break;
+                            case 'AwaitPushDlg':
+                                setAwaitPushProps(e.props);
+                                break;
+                            case 'DecideIfWithVideoDlg':
+                                setDecideIfWithVideoProps(e.props);
+                                break;
+                            case 'SetCallActive':
+                                setCallActive(e.active);
+                                break;
+                            case 'ModalDlg':
+                                setModalMsg(e.msg)
+                                break;
+                            case 'LocalMediaStream':
+                                setLocalMediaStream(e.stream as MediaStream | null);
+                                break;
+                            case 'SetConnectionComp':
+                                setConnectionsProps(d => {
+                                    ConnectionsProps.check(d);
+                                    const newConnectionsProps: ConnectionsProps = {
+                                        connections: {}
+                                    }
+                                    for (const key in d.connections) {
+                                        if (key !== e.remoteUser) {
+                                            newConnectionsProps.connections[key] = d.connections[key]
+                                        }
+                                    }
+
+                                    if (e.props != null) {
+                                        newConnectionsProps.connections[e.remoteUser] = e.props;
+                                    }
+                                    return ConnectionsProps.check(newConnectionsProps);
+                                })
+                                break;
+                            case 'RemoteMediaStream':
+                                setConnectionsProps(d => {
+                                    ConnectionsProps.check(d);
+                                    assert(e.remoteUser in d.connections);
+                                    const res = {
+                                        ...d,
+                                        connections: {
+                                            ...d.connections,
+                                            [e.remoteUser]: {
+                                                ...d.connections[e.remoteUser],
+                                                stream: e.stream
+                                            }
+                                        }
+                                    }
+                                    return ConnectionsProps.check(res)
+
+                                })
+                                break;
+                            case 'ReceivedCallDlg':
+                                setReceivedCallProps(e.props);
+                                break;
+                            case 'HangUpDlg':
+                                setHangUpProps(e.props);
+                                break;
+                        }
+                    }
+                }
+            } finally {
+                subscr.unsubscribe();
+            }
+        }
+
+        try {
+            standardCatching(handleEvents());
+            standardCatching(routeActivity(chatId, abortController.signal, eventBusKey, accumulatedFetching).catch(reason => {
+                console.log('caught directly', reason);
+            }));
+
+
+            // // TODO begin repetitive test of routeActivity for memory leaks
+            // {
+            //     const runTest = async () => {
+            //         for (let i = 0; i < 10; ++i) {
+            //             console.warn('runTest', i);
+            //             const c = new FixedAbortController();
+            //             const routeActivityProm = routeActivity(chatId, c.signal, eventBusKey, accumulatedFetching);
+            //             await timeout(10, c.signal);
+            //             c.abort();
+            //             console.log('after abort')
+            //             try {
+            //                 await routeActivityProm;
+            //             } catch (reason) {
+            //                 console.error('caught in routeActivityProm of runTest');
+            //             }
+            //         }
+
+            //     }
+
+            //     runTest();
+            // }
+            // // TODO end repetitive test of routeActivity for memory leaks
+        } catch (reason: any) {
+            console.log('caught in page mount effect', reason);
+            if (reason.name !== 'AbortError') {
+                console.error(reason);
+            }
+        }
+
+        return () => {
+            try {
+                console.log('before abortController.abort(): signal', abortController.signal)
+                abortController.abort();
+                console.log('after abortController.abort()')
+
+            } catch (reason) {
+                console.error('caught in abort effect', reason);
+            }
+        }
+    }, [chatAddErrorLine, chatOnStart, chatOnStop, setBusy])
+
+    const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
+        if (e.key === 'Enter') {
+            chatOnSend();
+        }
+    }
+
+    const chatComponents = <>
+        <ChatPanelComp /* ref={chatLinesRef} */ events={chat.chatEvents} linesBeingSent={chat.linesBeingSent} /* lines={chatLines} */ /* onScroll={onScroll} */ small={callActive} />
+        <input key='chatInput' readOnly={fetchError != null} contentEditable={fetchError == null} ref={chatInputRef} className={fetchError != null ? styles.frozen : ''} value={chat.chatInput} onChange={chatOnInputChange} onKeyDown={onChatKeyDown} />
+        {
+            fetchError == null &&
+            <button key='send' onClick={chatOnSend}>Send</button>
+        }
+        {
+            fetchError != null &&
+            <button ref={tryAgainRef} key='tryAgain' onClick={() => {
+                fireEvent<TryAgainClicked>({
+                    type: 'TryAgainClicked',
+                })
+            }}>Try again</button>
+        }
+    </>
+
+    return (
+        <div>
+            <header className={styles.header}>
+                {/* <div className={styles.inlineBlock}>
+                <h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+            </div>
+            {
+                regularPageProps != null &&
+                <div className={`${styles.inlineBlock}`}>
+                    <div className={`${styles.inlineBlock}`}>
+                        <button className={styles.redButton}>Logout</button>
                     </div>
-                }
-                {
-                    inputLoginData &&
-                    <div className={styles.flexColumn}>
-                        <h2>Login (as existing user)</h2>
-                        <label>User</label>
-                        <input ref={loginInputRef} value={loginName} onChange={(e) => {
-                            setLoginName(e.target.value)
-                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
-                        <label>Password</label>
-                        <input type='password' value={loginPasswd} onChange={(e) => {
-                            setLoginPasswd(e.target.value);
-                        }} onKeyDown={(e) => onRegisterKeyDown(e)} />
-                        <button className={styles.greenButton} onClick={onLoginDataOk}>Login</button>
-                        <button className={styles.redButton} onClick={onLoginDataCancel}>Cancel</button>
+                    <div className={styles.inlineBlock}>
+                        <button>Wait for push notification ...</button>
                     </div>
+                </div>
+            } */}
+
+
+                <div className={styles.headerSub}>
+                    <div>
+                        <h4>pr-webRTC</h4>
+                        <h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+                    </div>
+
+                    {
+                        regularPageProps != null && fetchError == null &&
+                        <div className={styles.flexRow}>
+                            <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
+                                type: 'LogoutClicked',
+                            })
+                            }>Logout</button>
+                            <button onClick={() => fireEvent<WaitForPushClicked>({
+                                type: 'WaitForPushClicked',
+                            })
+                            }>Wait for push notification ...</button>
+                        </div>
+                    }
+                </div>
+            </header>
+            {startPageProps != null && <StartPageComp {...startPageProps} />}
+            {loginDlgProps != null && <LoginDlgComp {...loginDlgProps} />}
+            {registerDlgProps != null && <RegisterDlgComp {...registerDlgProps} />}
+            {/* {
+                fetchErrorDuringLogin != null &&
+                <ShowFetchErrorDuringLoginComp error={fetchErrorDuringLogin} />
+            } */}
+            <main className={styles.main}>
+                {busyVisible && busyComment != null && <div>
+                    <h1>Busy ...</h1>
+                    <p>{busyComment}</p>
+                </div>}
+                {authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                    fireEvent<CloseClicked>({
+                        type: 'CloseClicked',
+                    })
+
+                } onUseHere={() => fireEvent<UseHereClicked>({
+                    type: 'UseHereClicked',
+                })
+                } />}
+                {
+                    setupPushProps != null &&
+                    <SetupPushComp {...setupPushProps} onOk={() => fireEvent<OkClicked>({
+                        type: 'OkClicked',
+                    })
+                    } onCancel={() => fireEvent<CancelClicked>({
+                        type: 'CancelClicked',
+                    })
+                    } onTryAgain={() => fireEvent<TryAgainClicked>({
+                        type: 'TryAgainClicked',
+                    })
+                    } />
                 }
                 {
-                    regularViews &&
+                    awaitPushProps != null &&
+                    <AwaitPushComp {...awaitPushProps} onCancel={() => fireEvent<CancelClicked>({
+                        type: 'CancelClicked',
+                    })
+                    } />
+                }
+                {regularPageProps != null &&
                     <>
                         <div className={styles.left}>
-                            <ChatUserListComp
+                            <MultiSelectChatUserListComp
                                 userListState={chat.userList}
-                                small={videoCallActive}
+                                small={callActive}
                                 onKey={(e) => {
                                     throw new Error('nyi');
                                 }}
-                                onClick={onUserClick} />
+                                onClick={chatOnUserClick} />
+                            <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
+                                fireEvent<CallClicked>({
+                                    type: 'CallClicked',
+                                    callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
+                                })
+
+                            } />
+                            <button className={styles.reject} onClick={() => {
+                                fireEvent<HangUpClicked>({
+                                    type: 'HangUpClicked',
+                                    remoteUser: null
+                                });
+                            }} />
+                            {
+                                cameraTestButtonText != null &&
+                                <button onClick={() => fireEvent<CameraTestClicked>({
+                                    type: 'CameraTestClicked',
+                                })
+                                }>{cameraTestButtonText}</button>
+                            }
+                            {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
+                            <button onClick={() => fireEvent<VideoDataSettingsClicked>({
+                                type: 'VideoDataSettingsClicked',
+                            })
+                            }>Video settings for individual connections ...</button>
+                            {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
+                            {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+                            <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo} />
+                            {callActive && chatComponents}
+
                         </div>
                         <div className={styles.right}>
-                            <ChatPanelComp /* ref={chatLinesRef} */ events={chat.chatEvents} linesBeingSent={chat.linesBeingSent} /* lines={chatLines} */ /* onScroll={onScroll} */ small={small} />
-                            <input key='chatInput' readOnly={chatInputFrozen} contentEditable={!chatInputFrozen} ref={chatInputRef} className={chatInputFrozen ? styles.frozen : ''} value={chat.chatInput} onChange={chat.onInputChange} onKeyDown={onChatKeyDown} />
+                            {!callActive && chatComponents}
                             {
-                                !(connectionError && connectionErrorConfirmed) &&
-                                <button key='send' onClick={chat.onSend} disabled={chatInputFrozen}>Send</button>
+                                localMediaStream != null &&
+                                <VideoComp mediaStream={localMediaStream} />
                             }
-                            {
-                                (connectionError && connectionErrorConfirmed) &&
-                                <button key='tryAgain' onClick={() => {
-                                    setChatInputFrozen(false);
-                                    accumulatedFetching.current?.setInterrupted(false);
-                                    setConnectionError(false);
-                                    setConnectionErrorConfirmed(false);
-                                }}>Try again</button>
-                            }
+                            <p className={styles.comment}>Hierunter folgt ConnectionsComp</p>
+                            <ConnectionsComp {...connectionsProps} />
                         </div>
                     </>
                 }
-            </div>
+            </main>
+
             {
-                error !== '' &&
-                <div className={styles.error}>
-                    <span className={styles.errorLine}>{error}</span>&nbsp;
-                    <a className={styles.dismiss} onClick={() => { setError('') }}>[Dismiss]</a>
-                </div>
-            }
-            <ContactingServerManagedDlg eventBusKey={CONTACTING_SERVER_EVENT_BUS_KEY} />
-            {
-                connectionError && !connectionErrorConfirmed &&
-                <ModalDialog key='conDlg'>
-                    <h2>No connection to the server</h2>
-                    <p>{'Please ensure you are connected to the internet and then click on "Try again"'}</p>
-                    <button onClick={() => {
-                        setConnectionErrorConfirmed(true);
-                    }}>OK</button>
+                modalMsg != null &&
+                <ModalDialog >
+                    <p>{modalMsg}</p>
+                    <ButtonRow><button onClick={() => {
+                        setModalMsg(null); fireEvent<OkClicked>({
+                            type: 'OkClicked',
+                        })
+                    }
+                    }>OK</button></ButtonRow>
                 </ModalDialog>
             }
-        </>
 
+            {
+                fetchError != null &&
+                <FetchErrorComp error={fetchError} />
+            }
+        </div>
     )
 }

@@ -10,7 +10,9 @@ const createJestConfig = nextJest({
 const config = {
     coverageProvider: 'v8',
     // original:
-    testEnvironment: 'jsdom',
+    // testEnvironment: 'jsdom',
+    testEnvironment: 'node',
+    testRegex: '(/__tests__/.*|(\\.|/)(mongodbtest))\\.[jt]sx?$',
     // test:
     // testEnvironment: './app/_tests/nodeEnvironment.js'
     // Add more setup options before each test is run
