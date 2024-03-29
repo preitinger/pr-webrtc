@@ -27,7 +27,6 @@ export function defaultWithVideo(user: string, remoteUser: string): WithVideo {
     }
 }
 
-
 function nyi() {
     try {
         throw new Error('nyi');
@@ -478,6 +477,22 @@ type ManagePeerConnectionState = 'before offer user media'
     | 'adding candidate'
 
 
+function cloneVideoOnly(mediaStream: MediaStream | null) {
+    if (mediaStream == null) return null;
+    const videoTracks = mediaStream.getVideoTracks();
+    if (videoTracks.length > 0) {
+        const clone = mediaStream.clone();
+        clone.getAudioTracks().forEach(audioTrack => {
+            audioTrack.stop();
+        })
+        return clone;
+    }
+
+    return null;
+}
+/**
+ * see WebRTC Demo.vpp://diagram/I6aLkXGD.AACASGE (Connection Activity Diagram3)
+ */
 export class Connection {
     constructor(sentVideoUpdated: (stream: MediaStream | null) => void,
         closed: () => void,
@@ -487,36 +502,546 @@ export class Connection {
         outerSignal: AbortSignal,
         withVideo?: WithVideo
     ) {
+        [this.abortController, this.releaseAbortController] = chainedAbortController(outerSignal);
+        this.sentVideoUpdated = sentVideoUpdated;
+        this.closed = closed;
+        this.send = send;
+        this.eventBus = eventBus;
+        this.user = user;
+        this.remoteUser = remoteUser;
+        this.remoteRole = remoteRole;
+        this.withVideo = withVideo ?? null;
+
+        switch (remoteRole) {
+            case 'callee':
+                assert(this.withVideo != null);
+                this.sendRemoteMsg({
+                    type: 'prepareCall',
+                    videoAccepted: this.withVideo.receive
+                })
+                this.forwardMessages();
+                break;
+
+            case 'caller':
+                this.nextRemoteMsg()/* 
+                this.waitForPrepareCall() */.then(msg => {
+                    this.abortController.signal.throwIfAborted();
+                    if (msg.type !== 'prepareCall') {
+                        console.error('unexpected msg (expected prepareCall)', msg);
+                    }
+                    assert(msg.type === 'prepareCall')
+                    this.remoteAcceptingVideo = msg.videoAccepted;
+                    this.fireEvent<EnqueueCall>({
+                        type: 'EnqueueCall',
+                        remoteUser: this.remoteUser
+                    });
+                    this.forwardMessages();
+                })
+                break;
+        }
+
+        this.pc.ontrack = (e => {
+            this.dbg('ontrack: e.streams.length=' + e.streams[0])
+            // console.log("pc.ontrack: e=", e);
+            this.abortController.signal.throwIfAborted();
+            this.fireEvent<SetConnectionComp>({
+                type: 'SetConnectionComp',
+                remoteUser: remoteUser,
+                props: {
+                    remoteUser: remoteUser,
+                    msg: null,
+                    stream: e.streams[0]
+                }
+            });
+        })
+        
+        this.pc.onnegotiationneeded = () => {
+            this.dbg('negotiationneeded')
+            this.abortController.signal.throwIfAborted();
+            this.makingOffer = true;
+            this.pc.setLocalDescription().then(() => {
+                this.abortController.signal.throwIfAborted();
+                assert(this.withVideo != null);
+                this.sendRemoteMsg({
+                    type: 'sdp',
+                    jsonSdp: JSON.stringify(this.pc.localDescription),
+                    videoAccepted: this.withVideo.receive
+                })
+
+            }).finally(() => {
+                this.makingOffer = false;
+            })
+        }
+
+        this.pc.onicecandidate = (e => {
+            this.dbg('icecandidate')
+            this.abortController.signal.throwIfAborted();
+            if (e.candidate != null) {
+                this.sendRemoteMsg({
+                    type: 'candidate',
+                    jsonCandidate: JSON.stringify(e.candidate)
+                })
+            }
+        })
+
+        this.pc.oniceconnectionstatechange = () => {
+            this.dbg('iceconnectionstatechange: ' + JSON.stringify(this.pc.iceConnectionState));
+            this.abortController.signal.throwIfAborted();
+            if (this.pc.iceConnectionState === 'failed') {
+                this.pc.restartIce();
+            }
+        }
+    }
+
+    private async waitForPrepareCall(): Promise<RemoteMsg> {
+        let msg;
+        do {
+            msg = await this.nextRemoteMsg()
+            if (msg.type === 'prepareCall') return msg;
+        } while (true);
+    }
+
+    private async forwardMessages() {
+        this.abortController.signal.throwIfAborted();
+        try {
+            await Promise.all([this.forwardRemoteMessages(), this.forwardEvents()])
+
+        } catch (reason: any) {
+            if (reason.name !== 'AbortError') {
+                console.error(reason);
+            } else {
+                // console.log('ignoring: ', reason);
+            }
+        }
+    }
+
+    private async forwardRemoteMessages() {
+        while (true) {
+            this.abortController.signal.throwIfAborted();
+            const msg = await this.nextRemoteMsg();
+            await this.handleRemoteMsg(msg);
+        }
+    }
+
+    private async forwardEvents() {
+        this.abortController.signal.throwIfAborted();
+        const subscr = this.eventBus.subscribe();
+
+        try {
+            const MyEvents = rt.Union(HangUp)
+            while (true) {
+                const e = await waitForGuard({subscr: subscr}, MyEvents, this.abortController.signal);
+                this.abortController.signal.throwIfAborted();
+                switch (e.type) {
+                    case 'HangUp':
+                        this.sendRemoteMsg({
+                            type: 'hangUp',
+                        })
+                        this.rawHangUp();
+                        break;
+                }
+            }
+    
+        } finally {
+            subscr.unsubscribe();
+        }
+    }
+
+    private async handleRemoteMsg(msg: RemoteMsg): Promise<void> {
+        this.dbg('handleRemoteMsg: ' + JSON.stringify(msg))
+        switch (msg.type) {
+            case 'sdp':
+                const description = JSON.parse(msg.jsonSdp) as RTCSessionDescription;
+                this.ignoreOffer = !this.polite() && description.type === 'offer' && (this.makingOffer || this.pc.signalingState !== 'stable')
+                if (this.ignoreOffer) return;
+                await this.pc.setRemoteDescription(description);
+                this.abortController.signal.throwIfAborted();
+                if (description.type === 'offer') {
+                    await this.pc.setLocalDescription();
+                    this.abortController.signal.throwIfAborted();
+                    assert(this.withVideo != null); // otherwise concept is completely wrong ;-)
+                    this.sendRemoteMsg({
+                        type: 'sdp',
+                        jsonSdp: JSON.stringify(this.pc.localDescription),
+                        videoAccepted: this.withVideo?.receive
+                    })
+                }
+                break;
+
+            case 'candidate':
+                if (!this.ignoreOffer) {
+                    const candidate = JSON.parse(msg.jsonCandidate);
+                    // console.log('before addIceCandidate: candidate', candidate)
+                    this.pc.addIceCandidate(candidate);
+                }
+                break;
+
+            case 'prepareCall':
+                this.remoteAcceptingVideo = msg.videoAccepted;
+                await this.updateMedia();
+                this.abortController.signal.throwIfAborted();
+                break;
+
+            case 'hangUp':
+                this. fireEvent<ChatAddHintLine>({
+                    type: 'ChatAddHintLine',
+                    hint: `${this.remoteUser} has hung up.`
+                });
+                this.rawHangUp();
+                break;
+
+            case 'videoAcception':
+                this.remoteAcceptingVideo = msg.accepted;
+                await this.updateMedia();
+                break;
+        }
+
+    }
+
+    private rawHangUp() {
+        console.log('rawHangUp for ', this.remoteUser)
+        this.abortController.signal.throwIfAborted();
+        this.abortController.abort();
+        if (this.sendingVideo) {
+            this.sentVideoUpdated(null);
+        }
+        this.fireEvent<SetConnectionComp>({
+            type: 'SetConnectionComp',
+            remoteUser: this.remoteUser,
+            props: null
+        });
+        if (this.videoSender?.track != null) {
+            this.videoSender?.track.stop();
+        }
+        if (this.audioSender?.track != null) {
+            this.audioSender?.track.stop();
+        }
+        this.pc.close();
+        this.closed();
+    }
+
+    private async updateMedia() {
+        this.dbg('updateMedia: (outStream == null)=' + JSON.stringify(this.outStream == null) + ', sendingVideo=' + JSON.stringify(this.sendingVideo) + ', withVideo.send=' + JSON.stringify(this.withVideo?.send) + ', remoteAcceptingVideo=' + this.remoteAcceptingVideo);
+        if (this.withVideo == null) return;
+
+        while (!this.updatingMedia && (this.outStream == null || (this.sendingVideo !== (this.withVideo.send && this.remoteAcceptingVideo)))) {
+            this.updatingMedia = true;
+            const oldSendingVideo = this.sendingVideo;
+            this.sendingVideo = this.withVideo.send && this.remoteAcceptingVideo;
+            this.dbg('new value sendingVideo: ' + JSON.stringify(this.sendingVideo));
+            this.outStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: this.sendingVideo
+            })
+            this.abortController.signal.throwIfAborted();
+            const senders = this.pc.getSenders();
+            // console.log('senders.length', senders.length);
+            // for (const sender of senders) {
+                // console.log('track of sender', sender.track);
+            // }
+            // if (senders.length === 0) {
+            //     // just add all tracks to the peer connection
+            //     const newTracks = this.outStream.getTracks();
+            //     console.log('tracks of new outStream', newTracks)
+            //     for (const track of newTracks) {
+            //         this.dbg('adding track (' + track.kind + ') to pc');
+            //         this.pc.addTrack(track, this.outStream);
+            //     }
+            // } else {
+            //     const audioTracks = this.outStream.getAudioTracks();
+            //     const audioTrack = audioTracks.length > 0 ? audioTracks[0] : null;
+            //     const videoTracks = this.outStream.getVideoTracks();
+            //     const videoTrack = videoTracks.length > 0 ? videoTracks[0] : null;
+            //     console.log('audioTrack', audioTrack, 'videoTrack', videoTrack)
+            //     // replace tracks
+            //     let replacedVideo = false;
+            //     for (const sender of senders) {
+            //         if (sender.track?.kind === 'audio') {
+            //             console.log('replace audio track in pc by', audioTrack)
+            //             await sender.replaceTrack(audioTrack)
+            //             this.abortController.signal.throwIfAborted();
+            //         } else if (sender.track?.kind === 'video') {
+            //             console.log('replacing video track in pc by', videoTrack)
+            //             await sender.replaceTrack(videoTrack)
+            //             this.abortController.signal.throwIfAborted();
+            //             replacedVideo = true;
+            //         }
+
+            //         if (videoTrack != null && !replacedVideo) {
+            //             try {
+            //                 this.pc.addTrack(videoTrack, this.outStream)
+            //             } catch (reason) {
+            //                 console.error(reason);
+            //             }
+            //         }
+            //     }
+            // }
+            // {
+            //     // new
+            //     const audioTracks = this.outStream.getAudioTracks();
+            //     const audioTrack = audioTracks.length > 0 ? audioTracks[0] : null;
+            //     const videoTracks = this.outStream.getVideoTracks();
+            //     const videoTrack = videoTracks.length > 0 ? videoTracks[0] : null;
+            //     if (this.audioSender != null) {
+            //         if (this.audioSender.track != null) this.audioSender.track.stop();
+            //         await this.audioSender.replaceTrack(audioTrack);
+            //     } else if (audioTrack != null) {
+            //         this.audioSender = this.pc.addTrack(audioTrack, this.outStream);
+            //     }
+            //     if (this.videoSender != null) {
+            //         if (this.videoSender.track != null) this.videoSender.track.stop();
+            //         await this.videoSender.replaceTrack(videoTrack);
+            //     } else if (videoTrack != null) {
+            //         this.videoSender = this.pc.addTrack(videoTrack, this.outStream);
+            //     }
+
+            // }
+            {
+                // oder doch "plump und einfach"
+                if (this.videoSender != null) {
+                    this.videoSender.track?.stop();
+                    this.pc.removeTrack(this.videoSender);
+                    this.videoSender = null;
+                }
+                if (this.audioSender != null) {
+                    this.audioSender.track?.stop();
+                    this.pc.removeTrack(this.audioSender);
+                    this.audioSender = null;
+                }
+
+                this.outStream.getTracks().forEach(track => {
+                    assert(this.outStream != null);
+                    if (track.kind === 'audio') {
+                        this.audioSender = this.pc.addTrack(track, this.outStream);
+                    } else {
+                        this.videoSender = this.pc.addTrack(track, this.outStream);
+                    }
+                })
+            }
+
+            this.updatingMedia = false;
+            if (this.sendingVideo !== oldSendingVideo) {
+                const cloned = cloneVideoOnly(this.outStream);
+                // console.log('before sentVideoUpdated: cloned', cloned, 'this.outStream', this.outStream);
+                assert((cloned != null) === this.sendingVideo);
+                this.sentVideoUpdated(cloned);
+    
+            }
+        }
+    }
+
+    private polite() {
+        return this.remoteUser < this.user;
+    }
+
+    private nextRemoteMsg(): Promise<RemoteMsg> {
+        this.abortController.signal.throwIfAborted();
+        if (this.messages.length === 0) {
+            return new Promise<RemoteMsg>((res, rej) => {
+                this.resolveNextRemoteMsg = res;
+                const onAbort = () => {
+                    rej(this.abortController.signal.reason);
+                    this.abortController.signal.removeEventListener('abort', onAbort);
+                }
+                this.abortController.signal.addEventListener('abort', onAbort);
+            })
+        } else {
+            return Promise.resolve(this.parseRemoteMsg(this.messages.splice(0, 1)[0]))
+        }
     }
 
     async onDequeueCall() {
+        function withVideoFromProps(props: ReceivedCallProps | null): WithVideo | null {
+            return props?.withVideo ?? null;
+        }
+
+        this.dbg('onDequeueCall')
+
+        if (this.withVideo == null) {
+            const updateAndFireProps = (newProps: ReceivedCallProps | null): ReceivedCallProps | null => {
+                this.fireEvent<ReceivedCallDlg>({
+                    type: 'ReceivedCallDlg',
+                    props: newProps
+                });
+
+                return newProps;
+            }
+            let props: ReceivedCallProps | null = null;
+            props = updateAndFireProps({
+                remoteUser: this.remoteUser,
+                withVideo: defaultWithVideo(this.user, this.remoteUser)
+            })
+            assert(props != null);
+            const subscr = this.eventBus.subscribe();
+            try {
+                let loop = true;
+
+                while (loop) {
+                    const e = await waitForGuard({ subscr: subscr }, rt.Union(SendVideoChanged, ReceiveVideoChanged, AcceptClicked, HangUpClicked, RemoteHangUp, RegularFunctionsShutdown), this.abortController.signal);
+                    switch (e.type) {
+                        case 'SendVideoChanged':
+                            if (e.remoteUser === this.remoteUser) {
+                                localStorageAccess.lastVideoSettings.send.set(this.user, e.remoteUser, e.send)
+                                assert(props != null);
+                                props = updateAndFireProps({
+                                    ...props,
+                                    withVideo: {
+                                        ...props.withVideo,
+                                        send: e.send
+                                    }
+                                })
+                            }
+                            break;
+
+                        case 'ReceiveVideoChanged':
+                            if (e.remoteUser === this.remoteUser) {
+                                localStorageAccess.lastVideoSettings.receive.set(this.user, e.remoteUser, e.receive)
+                                assert(props != null)
+                                props = updateAndFireProps({
+                                    ...props,
+                                    withVideo: {
+                                        ...props.withVideo,
+                                        receive: e.receive
+                                    }
+                                })
+                            }
+                            break;
+
+                        case 'AcceptClicked':
+                            this.fireEvent<ReceivedCallDlg>({
+                                type: 'ReceivedCallDlg',
+                                props: null
+                            });
+                            this.setWithVideo(withVideoFromProps(props));
+                            loop = false;
+                            break;
+
+
+                        case 'HangUpClicked':
+                            if (e.remoteUser === this.remoteUser) {
+                                this.fireEvent<ReceivedCallDlg>({
+                                    type: 'ReceivedCallDlg',
+                                    props: null
+                                });
+                                this.setWithVideo(null);
+                                loop = false;
+                            } else {
+                                // console.log('ignored "wrong" HangUpClicked')
+                            }
+                            break;
+
+                        case 'RemoteHangUp':
+                            if (e.remoteUser === this.remoteUser) {
+                                this.fireEvent<ReceivedCallDlg>({
+                                    type: 'ReceivedCallDlg',
+                                    props: null
+                                });
+                                loop = false;
+                            }
+                            break;
+
+                        case 'RegularFunctionsShutdown':
+                            this.fireEvent<ReceivedCallDlg>({
+                                type: 'ReceivedCallDlg',
+                                props: null
+                            });
+                            loop = false;
+                            break;
+                    }
+                }
+            } finally {
+                subscr.unsubscribe();
+            }
+        }
     }
+
     /**
      * withVideo = null means reject of the call
      * @param withVideo 
      */
-    setWithVideo(withVideo: WithVideo | null) {
+    setWithVideo(wv: WithVideo | null) {
+        this.abortController.signal.throwIfAborted();
+        this.dbg('setWithVideo: ' + JSON.stringify(wv));
+        if (wv != null) {
+            if (this.withVideo == null || this.withVideo.receive !== wv.receive) {
+                this.sendRemoteMsg({
+                    type: 'videoAcception',
+                    accepted: wv.receive
+                })
+            }
+            this.withVideo = wv;
+            this.updateMedia();
+        } else {
+            this.sendRemoteMsg({
+                type: 'hangUp'
+            })
+            this.rawHangUp();
+        }
     }
 
     addMessages(messages: string[]) {
+        if (this.abortController.signal.aborted) console.error('aborted?!');
+        this.abortController.signal.throwIfAborted();
+        if (messages.length === 0) return;
+        this.dbg('addMessages: ' + JSON.stringify(messages));
+
+        if (this.resolveNextRemoteMsg != null) {
+            this.resolveNextRemoteMsg(this.parseRemoteMsg(messages[0]))
+            this.messages.push(...messages.splice(1));
+        } else {
+            this.messages.push(...messages);
+        }
+    }
+
+    private parseRemoteMsg(stringifiedMsg: string) {
+        return RemoteMsg.check(JSON.parse(stringifiedMsg));
     }
 
     async shutdownAndJoin(): Promise<void> {
-        nyi();
-        this.fire<SetConnectionComp>({
-            type: 'SetConnectionComp',
-            remoteUser: this.remoteUser,
-            props: null
+        this.abortController.signal.throwIfAborted();
+        this.sendRemoteMsg({
+            type: 'hangUp'
+        })
+        this.rawHangUp();
+        // doch nix zu "joinen"
+    }
+
+    private fireEvent<T>(t: T) {
+        this.eventBus.publish(t);
+    }
+
+    private sendRemoteMsg(msg: RemoteMsg) {
+        this.send(JSON.stringify(msg));
+    }
+
+    private dbg(msg: string) {
+        this.fireEvent<ChatAddHintLine>({
+            type: 'ChatAddHintLine',
+            hint: `${this.remoteUser}\n${msg}`
         })
     }
 
-    private fire<E>(e: E) {
-        nyi();
-    }
-
+    private sentVideoUpdated: (stream: MediaStream | null) => void;
+    private closed: () => void;
+    private send: (stringifiedMsg: string) => void;
+    private abortController: AbortController;
+    private releaseAbortController: () => void;
+    private eventBus: EventBus<unknown>;
     private user: string;
     private remoteUser: string;
     private remoteRole: 'callee' | 'caller';
+    private withVideo: WithVideo | null;
+    private pc: RTCPeerConnection = new RTCPeerConnection(config);
+    private videoSender: RTCRtpSender | null = null;
+    private audioSender: RTCRtpSender | null = null;
+    private makingOffer = false;
+    private ignoreOffer = false;
+    private remoteAcceptingVideo = false;
+    private sendingVideo = false;
+    private updatingMedia = false;
+    private outStream: MediaStream | null = null;
+    private resolveNextRemoteMsg: ((msg: RemoteMsg) => void) | null = null;
+    private messages: string[] = [];
 }
 
 export class ConnectionOld {
@@ -643,7 +1168,7 @@ export class ConnectionOld {
                                 this.setWithVideo(null);
                                 loop = false;
                             } else {
-                                console.log('ignored "wrong" HangUpClicked')
+                                // console.log('ignored "wrong" HangUpClicked')
                             }
                             break;
 
@@ -722,7 +1247,7 @@ export class ConnectionOld {
                                             if (sender.track?.kind === 'video') {
                                                 if (false) {
                                                     sender.track?.stop();
-                                                    console.log('stopped track');
+                                                    // console.log('stopped track');
                                                     this.dbg('stopped track on withVideo.send = false')
                                                     this.dbg('before sender.replaceTrack');
                                                     this.replacedSender = sender;
@@ -872,7 +1397,7 @@ export class ConnectionOld {
         if (reason.name !== 'AbortError') {
             console.error(reason);
         } else {
-            console.log('ignore', reason);
+            // console.log('ignore', reason);
         }
 
     }
@@ -998,12 +1523,12 @@ export class ConnectionOld {
                                         case 'candidate':
 
                                             assert(this.pc != null);
-                                            console.log('HIER before pc.addIceCandidate');
+                                            // console.log('HIER before pc.addIceCandidate');
                                             this.pc.addIceCandidate(JSON.parse(m.jsonCandidate)).then(() => {
-                                                console.log('HIER then');
+                                                // console.log('HIER then');
                                                 this.candidateAdded();
                                             });
-                                            console.log('HIER after');
+                                            // console.log('HIER after');
                                             this.st({ main: 'manage peer connection', sub: 'adding candidate' })
                                             break;
 
@@ -1134,7 +1659,7 @@ export class ConnectionOld {
                                 case 'before offer user media':
                                     this.dbg('gonna add each track to pc');
                                     const fittingToWithVideo = (this.sendingVideo) === (this.withVideo?.send && this.remoteAcceptingVideo)
-                                    console.log('fittingToWithVideo', fittingToWithVideo);
+                                    // console.log('fittingToWithVideo', fittingToWithVideo);
                                     if (fittingToWithVideo) {
                                         stream.getTracks().forEach(track => {
                                             assert(this.pc != null);
@@ -1202,7 +1727,7 @@ export class ConnectionOld {
 
                                 case 'awaiting candidates':
                                     // TODO begin test
-                                    console.log('awaiting candidate: onNegotiationNeeded');
+                                    // console.log('awaiting candidate: onNegotiationNeeded');
                                     assert(this.pc != null);
                                     this.pc.setLocalDescription().then(() => {
                                         this.dbg('test local description set after test change of withVideo.send: ' + JSON.stringify(this.pc?.localDescription))
@@ -1253,7 +1778,7 @@ export class ConnectionOld {
                                         })
                                         // keep this state
                                     } else {
-                                        console.log('last candidate because null');
+                                        // console.log('last candidate because null');
                                     }
                                     break;
 
@@ -1372,7 +1897,7 @@ export class ConnectionOld {
             this.onIceCandidate(e.candidate);
         }
         pc.ontrack = (e) => {
-            console.log('track', this.st1, e);
+            // console.log('track', this.st1, e);
             this.dbg('track');
             if (e.streams.length !== 1) {
                 console.error('unexpected length of streams', e.streams);
@@ -1394,15 +1919,15 @@ export class ConnectionOld {
             // });
         }
         pc.onconnectionstatechange = (e) => {
-            console.log('connectionState', pc.connectionState);
+            // console.log('connectionState', pc.connectionState);
             this.dbg(`connectionState ${pc.connectionState}`);
         }
         pc.onsignalingstatechange = (e) => {
-            console.log('signalingState', pc.signalingState);
+            // console.log('signalingState', pc.signalingState);
             this.dbg(`signalingState ${pc.signalingState}`)
         }
         pc.oniceconnectionstatechange = (e) => {
-            console.log('iceConnectionState', pc.iceConnectionState);
+            // console.log('iceConnectionState', pc.iceConnectionState);
             this.dbg(`iceConnectionState ${pc.iceConnectionState}`)
         }
         // TODO add event listeners

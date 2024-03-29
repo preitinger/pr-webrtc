@@ -50,7 +50,7 @@ function abortableSleep(ms: number, signal: AbortSignal) {
     function addEventListener(l: EventListener) {
         eventListeners.push(l);
         signal.addEventListener('abort', l);
-        console.log('addedEventListener in abortableSleep');
+        // console.log('addedEventListener in abortableSleep');
         return l;
     }
     return new Promise<void>((res, rej) => {
@@ -65,7 +65,7 @@ function abortableSleep(ms: number, signal: AbortSignal) {
     }).finally(() => {
         for (const l of eventListeners) {
             signal.removeEventListener('abort', l);
-            console.log('removedEventListener in abortableSleep')
+            // console.log('removedEventListener in abortableSleep')
         }
     })
 }
@@ -115,10 +115,10 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
             type: 'StartPage',
             props: {}
         })
-        console.log('before wait for LoginClicked or RegisterClicked')
+        // console.log('before wait for LoginClicked or RegisterClicked')
         const startPageRes = await waitForGuard({ bus: eventBus }, Union(LoginClicked, RegisterClicked), signal);
 
-        console.log('after wait for LoginClicked or RegisterClicked', startPageRes)
+        // console.log('after wait for LoginClicked or RegisterClicked', startPageRes)
         fireEvent<StartPage>({
             type: 'StartPage',
             props: null
@@ -249,12 +249,12 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
 
             if (user == null || passwd == null) throw new Error('user or passwd null');
             const requestResp = await loginRequest1(user, passwd, signal).then(resp => {
-                console.log('abortFetchErrorHandling aborted');
+                // console.log('abortFetchErrorHandling aborted');
                 return resp;
             })
 
             // const requestResp = await loginRequestCatchingFetchError(user, passwd, signal);
-            console.log('requestResp', requestResp)
+            // console.log('requestResp', requestResp)
             switch (requestResp.type) {
                 case 'success':
                     const loginResultData: LoginResultData = {
@@ -328,7 +328,7 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                 error: error
             }
         })
-        console.log('after publish(loginDlg)', user, passwd);
+        // console.log('after publish(loginDlg)', user, passwd);
         const res = (await waitForGuard({ bus: eventBus }, Union(LoginOrRegisterOk, CancelClicked), signal))
         fireEvent<LoginDlg>({
             type: 'LoginDlg',
@@ -394,7 +394,7 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
             user: user,
             passwd: passwd
         }, signal)
-        console.log('login resp', resp);
+        // console.log('login resp', resp);
         fireEvent<Busy>({
             type: 'Busy',
             comment: null
@@ -768,7 +768,7 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                     do {
                         const pushManager = (await navigator.serviceWorker.ready).pushManager;
                         let subscription = await pushManager.getSubscription()
-                        console.log('subscription from pushManager.getSubscription', subscription)
+                        // console.log('subscription from pushManager.getSubscription', subscription)
                         if (subscription == null) {
                             try {
                                 subscription = await pushManager.subscribe(subscriptionOptions)
@@ -857,7 +857,7 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                 navigator.serviceWorker.removeEventListener('message', onPush);
             }
             const onPush = (e: MessageEvent<{ caller: string; callee: string }>) => {
-                console.log('onPush: e.data', e.data);
+                // console.log('onPush: e.data', e.data);
                 if (signal.aborted) return;
                 if (e.data.callee !== user) {
                     // ignore
@@ -1052,14 +1052,14 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                     type: 'LocalMediaStream',
                     stream: mediaStream
                 })
-                console.log('fired LocalMediaStream(mediaStream)');
+                // console.log('fired LocalMediaStream(mediaStream)');
 
                 await abortableSleep(3000, signal);
                 fireEvent<LocalMediaStream>({
                     type: 'LocalMediaStream',
                     stream: null
                 })
-                console.log('fired LocalMediaStream(null)');
+                // console.log('fired LocalMediaStream(null)');
 
             } finally {
                 mediaStream.getTracks().forEach(track => {
@@ -1210,11 +1210,11 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
         if (reason.name !== 'AbortError') {
             console.error(reason);
         } else {
-            console.log('ignoring', reason);
+            // console.log('ignoring', reason);
         }
     }
 
-    console.warn(myCount, 'routeActivity ending');
+    // console.warn(myCount, 'routeActivity ending');
     return;
 
 

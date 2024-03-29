@@ -62,7 +62,6 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
         function onClosedConnection(remoteUser: string) {
             delete connections[remoteUser];
-            console.warn('onClosedConnection before fire SetConnectionComp(null);')
             fireEvent<SetConnectionComp>({
                 type: 'SetConnectionComp',
                 remoteUser: remoteUser,
@@ -236,11 +235,18 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 function forwardToConnections(resp: ApiResp<MsgResp>) {
                     if (resp.type === 'error') throw new Error(resp.error);
                     const receivedMessages = msgClient.processResp(resp);
-                    console.log("forwardToConnections: receivedMessages", receivedMessages);
+                    // console.log("forwardToConnections: receivedMessages", receivedMessages);
                     for (const remoteUser of Object.keys(receivedMessages)) {
-                        const messages = receivedMessages[remoteUser].msg;
+                        let messages = receivedMessages[remoteUser].msg;
                         if (messages.length === 0) continue;
                         if (!(remoteUser in connections)) {
+                            // ignore messages until 'prepareCall'; only then open a new connection
+                            const firstPrepareCallIdx = messages.findIndex(stringifiedMsg => {
+                                const msg = RemoteMsg.check(JSON.parse(stringifiedMsg));
+                                return msg.type === 'prepareCall';
+                            })
+                            if (firstPrepareCallIdx === -1) return;
+                            messages = messages.slice(firstPrepareCallIdx);
                             const sentVideoUpdated = (stream: MediaStream | null) => {
                                 fireEvent<VideoSenderCountUpdate>({
                                     type: 'VideoSenderCountUpdate',
@@ -294,7 +300,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 function createAbortController() {
                     const abortController = chainedAbortController(outerSignal)
                     abortController[0].signal.addEventListener('abort', (ev: Event) => {
-                        console.error('no error: gonna clearMyTimeout on abort event');
+                        // console.error('no error: gonna clearMyTimeout on abort event');
                         clearMyTimeout();
                         abortController[1]();
                     }, {
@@ -304,7 +310,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 }
 
                 function abortAndRelease() {
-                    console.warn('abortAndRelease of transportMessage');
+                    // console.warn('abortAndRelease of transportMessage');
                     abortController.abort();
                     releaseAbortController();
                 }
@@ -331,7 +337,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                     if (reason.name !== 'AbortError') {
                         console.error(reason);
                     } else {
-                        console.log('ignore', reason);
+                        // console.log('ignore', reason);
                     }
 
                 }
@@ -528,7 +534,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                         if (reason.name !== 'AbortError') {
                                             console.error(reason);
                                         } else {
-                                            console.log('ignored', reason);
+                                            // console.log('ignored', reason);
                                         }
                                     });
                                     interactionsRunning = true;
@@ -563,23 +569,30 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             const subscr = eventBus.subscribe();
 
             try {
+                let currentStream: MediaStream | null = null;
 
                 while (!shutdown) {
                     const e = await waitForGuard({ subscr: subscr }, rt.Union(VideoSenderCountUpdate, CameraTestClicked, RegularFunctionsShutdown), signal);
 
                     switch (e.type) {
                         case 'VideoSenderCountUpdate':
+                            // console.log('process VideoSenderCountUpdate: old senderCount', senderCount, 'e.stream', e.stream)
                             if (e.stream != null) {
                                 if (senderCount === 0) {
                                     fireEvent<LocalMediaStream>({
                                         type: 'LocalMediaStream',
-                                        stream: e.stream
+                                        stream: (currentStream = e.stream as MediaStream)
                                     })
                                     fireEvent<SetCameraTestButton>({
                                         type: 'SetCameraTestButton',
                                         label: null
                                     })
                                     evtlStopTestStream();
+                                } else {
+                                    const s = e.stream as MediaStream;
+                                    s.getTracks().forEach(track => {
+                                        track.stop(); // because was cloned
+                                    })
                                 }
 
                                 ++senderCount
@@ -590,8 +603,17 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                         type: 'LocalMediaStream',
                                         stream: null
                                     })
+                                    currentStream?.getTracks().forEach(track => {
+                                        track.stop();
+                                    })
+                                    currentStream = null;
+                                    fireEvent<SetCameraTestButton>({
+                                        type: 'SetCameraTestButton',
+                                        label: 'Camera Test'
+                                    });
                                 }
                             }
+                            // console.log('new senderCount', senderCount);
                             break;
 
                         case 'CameraTestClicked':
@@ -650,11 +672,15 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                             break;
 
                         case 'RegularFunctionsShutdown':
+                            console.warn('RegularFunctionsShutdown in localVideo')
                             shutdown = true;
                             break;
                     }
                 }
 
+                currentStream?.getTracks().forEach(track => {
+                    track.stop();
+                })
                 senderCount = 0;
                 evtlStopTestStream();
                 fireEvent<LocalMediaStream>({
@@ -673,10 +699,10 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }
 
         async function handleCallClick(callees: string[], signal: AbortSignal): Promise<{ [callee: string]: WithVideo } | null> {
-            console.log('handleCallClick: user', user, 'callees', callees, 'connections', connections);
+            // console.log('handleCallClick: user', user, 'callees', callees, 'connections', connections);
             const newUsers: string[] = [];
             for (const callee of callees) {
-                console.log('for: user', user, 'callee', callee);
+                // console.log('for: user', user, 'callee', callee);
                 if (callee === user) {
                     fireEvent<ChatAddErrorLine>({
                         type: 'ChatAddErrorLine',
@@ -694,7 +720,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
             const videoConfigSend = localStorageAccess.videoConfig.send.get(user);
             const videoConfigReceive = localStorageAccess.videoConfig.receive.get(user);
-            console.log('videoConfigSend', videoConfigSend, 'videoConfigReceive', videoConfigReceive);
+            // console.log('videoConfigSend', videoConfigSend, 'videoConfigReceive', videoConfigReceive);
 
             if (videoConfigSend === 'individually' || videoConfigReceive === 'individually') {
                 let decisions: {
@@ -755,7 +781,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                         }
                                     }
                                 }
-                                console.log('new decisions after SendVideoChanged', decisions)
+                                // console.log('new decisions after SendVideoChanged', decisions)
 
                                 fireEvent<DecideIfWithVideoDlg>({
                                     type: 'DecideIfWithVideoDlg',
@@ -778,7 +804,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                         }
                                     }
                                 }
-                                console.log('new decisions after ReceiveVideoChanged', decisions)
+                                // console.log('new decisions after ReceiveVideoChanged', decisions)
                                 fireEvent<DecideIfWithVideoDlg>({
                                     type: 'DecideIfWithVideoDlg',
                                     props: {
@@ -903,6 +929,29 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         //     subscr.unsubscribe();
         // }
 
+        {
+            let shutdown = false;
+            const subscr = eventBus.subscribe();
+            try {
+                while (!shutdown) {
+                    const e = await waitForGuard({subscr: subscr}, RegularFunctionsShutdown, signal);
+                    if (e.type === 'RegularFunctionsShutdown') {
+                        shutdown = true;
+                    }
+                }
+            } finally {
+                subscr.unsubscribe();
+            }
+
+            let cons: Connection[] = [];
+            let maxTries = 5;
+            do {
+                cons = Object.values(connections);
+                console.log('shutdownAndJoin for ', cons.length, ' connections ...');
+                await Promise.all(cons.map(con => con.shutdownAndJoin()))
+            } while (cons.length > 0 && maxTries-- > 0)
+
+        }
 
         await Promise.all([transportMessagesProm, queuedInteractionsProm, localVideoProm])
     }

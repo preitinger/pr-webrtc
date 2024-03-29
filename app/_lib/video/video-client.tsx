@@ -31,7 +31,7 @@ export const VideoComp = (props: VideoProps) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     useEffect(() => {
-        console.log('effect in VideoComp');
+        // console.log('effect in VideoComp');
         if (videoRef.current == null) return;
         videoRef.current.srcObject = props.mediaStream;
         if (props.mediaStream != null) {

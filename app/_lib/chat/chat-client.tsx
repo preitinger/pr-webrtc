@@ -767,7 +767,7 @@ export function useChat<T extends { type: Exclude<string, BusEventTypes>; }>({ c
         // chattingActivity();
         return () => {
             // handle effect end
-            console.log('handle chat effect end');
+            // console.log('handle chat effect end');
             mountAborter.abort();
             chattingAborter.current?.abort();
 
@@ -1081,7 +1081,7 @@ export function useMultiSelectChat<T extends { type: Exclude<string, BusEventTyp
         // chattingActivity();
         return () => {
             // handle effect end
-            console.log('handle chat effect end');
+            // console.log('handle chat effect end');
             mountAborter.abort();
             chattingAborter.current?.abort();
 
@@ -1093,7 +1093,6 @@ export function useMultiSelectChat<T extends { type: Exclude<string, BusEventTyp
     }, [chatId, timeoutMs])
 
     const onStart = useCallback((accumulatedFetching1: AccumulatedFetching, loginResultData: LoginResultData, onAuthenticationFailed1: () => void) => {
-        console.log('onStart');
         onAuthenticationFailed.current = onAuthenticationFailed1;
         getEventBus().publish({
             type: 'onStart',

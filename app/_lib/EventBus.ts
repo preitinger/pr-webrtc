@@ -59,7 +59,7 @@ export class Subscription<Event> {
                 signal: signal
             });
             ++globalTestCount;
-            console.log('globalTestCount nach add', globalTestCount);
+            // console.log('globalTestCount nach add', globalTestCount);
 
             // const wastingMemInClosure: number[] = [];
             // for (let i = 0; i < 1000000; ++i) {
@@ -73,7 +73,7 @@ export class Subscription<Event> {
             //     // signal?.removeEventListener('abort', dummy);
             // }
             addedAbortListeners.push(l);
-            console.log('abort listener added')
+            // console.log('abort listener added')
         }
 
         if (this.abortController.signal.aborted) {
@@ -89,7 +89,7 @@ export class Subscription<Event> {
 
                     function abortListener() {
                         // console.log('len', wastingInClosure.length);
-                        console.log('abort listener[1] with once in nextEvent')
+                        // console.log('abort listener[1] with once in nextEvent')
                         rej(signal?.reason)
                     }
                     addAbortListener(abortListener);
@@ -105,7 +105,7 @@ export class Subscription<Event> {
 
                     function abortListener() {
                         // console.log('len', wastingInClosure.length);
-                        console.log('abort listener[2] with once in nextEvent')
+                        // console.log('abort listener[2] with once in nextEvent')
                         rej(signal?.reason)
                     }
                     addAbortListener(abortListener);
@@ -124,9 +124,9 @@ export class Subscription<Event> {
         return result.finally(() => {
             for (const l of addedAbortListeners) {
                 signal?.removeEventListener('abort', l);
-                console.log('abort listener removed')
+                // console.log('abort listener removed')
                 --globalTestCount;
-                console.log('globalTestCount nach remove', globalTestCount);
+                // console.log('globalTestCount nach remove', globalTestCount);
             }
         })
     }

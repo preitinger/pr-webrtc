@@ -167,7 +167,7 @@ function standardCatching(prom: Promise<unknown>) {
         if (reason.name !== 'AbortError') {
             console.error(reason);
         } else {
-            console.log('silently ignored', reason);
+            // console.log('silently ignored', reason);
         }
     });
 }
@@ -453,9 +453,7 @@ type ConnectionsProps = rt.Static<typeof ConnectionsProps>
 // }
 
 function ConnectionsComp(props: ConnectionsProps) {
-    console.log('ConnectionsComp: props.connections', props.connections)
     const valList = Object.values(props.connections)
-    console.log('ConnectionsComp: valList', valList)
     return (
         <div>
             <p className={styles.comment}></p>
@@ -572,13 +570,8 @@ export default function Page() {
     const [receivedCallProps, setReceivedCallProps] = useState<ReceivedCallProps | null>(null);
     const [hangUpProps, setHangUpProps] = useState<HangUpProps | null>(null);
 
-
     useEffect(() => {
-        console.log('DEBUG EFFECT BECAUSE setBusy CHANGED!', setBusy);
-    }, [setBusy])
-
-    useEffect(() => {
-        console.log('starting main effect with routeActivity()')
+        // console.log('starting main effect with routeActivity()')
         const abortController = new FixedAbortController();
         const eventBus = getEventBus(eventBusKey);
         const throwIfAborted = () => abortController.signal.throwIfAborted();
@@ -611,14 +604,14 @@ export default function Page() {
                     throwIfAborted();
                     const e: any = await subscr.nextEvent();
                     throwIfAborted();
-                    console.log('handleEvents got', ('type' in e ? e.type : ''), e);
+                    // console.log('handleEvents got', ('type' in e ? e.type : ''), e);
                     if (MyEvents.guard(e)) {
                         switch (e.type) {
                             case 'StartPage':
                                 setStartPageProps(e.props);
                                 break;
                             case 'LoginDlg':
-                                console.log('setting loginDlgProps to ', e.props);
+                                // console.log('setting loginDlgProps to ', e.props);
                                 setLoginDlgProps(e.props);
                                 break;
                             case 'RegisterDlg':
@@ -641,7 +634,7 @@ export default function Page() {
                                 setCameraTestButtonText(e.label)
                                 break;
                             case 'HandlingFetchError':
-                                console.log('HandlingFetchError', e.error);
+                                // console.log('HandlingFetchError', e.error);
                                 setFetchError(e.error);
                                 break;
                             case 'ChatStart':
@@ -737,7 +730,7 @@ export default function Page() {
         try {
             standardCatching(handleEvents());
             standardCatching(routeActivity(chatId, abortController.signal, eventBusKey, accumulatedFetching).catch(reason => {
-                console.log('caught directly', reason);
+                // console.log('caught directly', reason);
             }));
 
 
@@ -764,7 +757,7 @@ export default function Page() {
             // }
             // // TODO end repetitive test of routeActivity for memory leaks
         } catch (reason: any) {
-            console.log('caught in page mount effect', reason);
+            // console.log('caught in page mount effect', reason);
             if (reason.name !== 'AbortError') {
                 console.error(reason);
             }
@@ -772,9 +765,9 @@ export default function Page() {
 
         return () => {
             try {
-                console.log('before abortController.abort(): signal', abortController.signal)
+                // console.log('before abortController.abort(): signal', abortController.signal)
                 abortController.abort();
-                console.log('after abortController.abort()')
+                // console.log('after abortController.abort()')
 
             } catch (reason) {
                 console.error('caught in abort effect', reason);
