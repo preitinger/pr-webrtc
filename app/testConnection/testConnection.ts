@@ -33,5 +33,5 @@ export async function testInstantiate() {
     const eventBus = getEventBus('testConnection');
     const con = new Connection(sentVideoUpdated, closed, send, eventBus, user, remoteUser, 'callee', signal, withVideo);
     sleep(10);
-    con.release();
+    con.shutdownAndJoin();
 }
