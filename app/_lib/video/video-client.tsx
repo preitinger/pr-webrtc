@@ -35,7 +35,10 @@ export const VideoComp = (props: VideoProps) => {
         if (videoRef.current == null) return;
         videoRef.current.srcObject = props.mediaStream;
         if (props.mediaStream != null) {
-            videoRef.current.scrollIntoView();
+            // videoRef.current.scrollIntoView();
+            if (props.mediaStream.getVideoTracks().length > 0) {
+                console.log('video track settings', props.mediaStream.getVideoTracks()[0].getSettings());
+            }
         }
     }, [props.mediaStream])
 

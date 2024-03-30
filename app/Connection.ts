@@ -511,6 +511,7 @@ export class Connection {
         this.remoteUser = remoteUser;
         this.remoteRole = remoteRole;
         this.withVideo = withVideo ?? null;
+        this.outerSignal = outerSignal;
 
         switch (remoteRole) {
             case 'callee':
@@ -554,7 +555,7 @@ export class Connection {
                 }
             });
         })
-        
+
         this.pc.onnegotiationneeded = () => {
             this.dbg('negotiationneeded')
             this.abortController.signal.throwIfAborted();
@@ -630,7 +631,7 @@ export class Connection {
         try {
             const MyEvents = rt.Union(HangUp)
             while (true) {
-                const e = await waitForGuard({subscr: subscr}, MyEvents, this.abortController.signal);
+                const e = await waitForGuard({ subscr: subscr }, MyEvents, this.abortController.signal);
                 this.abortController.signal.throwIfAborted();
                 switch (e.type) {
                     case 'HangUp':
@@ -641,7 +642,7 @@ export class Connection {
                         break;
                 }
             }
-    
+
         } finally {
             subscr.unsubscribe();
         }
@@ -683,7 +684,7 @@ export class Connection {
                 break;
 
             case 'hangUp':
-                this. fireEvent<ChatAddHintLine>({
+                this.fireEvent<ChatAddHintLine>({
                     type: 'ChatAddHintLine',
                     hint: `${this.remoteUser} has hung up.`
                 });
@@ -731,13 +732,16 @@ export class Connection {
             this.dbg('new value sendingVideo: ' + JSON.stringify(this.sendingVideo));
             this.outStream = await navigator.mediaDevices.getUserMedia({
                 audio: true,
-                video: this.sendingVideo
+                video: this.sendingVideo ? {
+                    width: 1024,
+                    height: 768
+                } : false
             })
             this.abortController.signal.throwIfAborted();
             const senders = this.pc.getSenders();
             // console.log('senders.length', senders.length);
             // for (const sender of senders) {
-                // console.log('track of sender', sender.track);
+            // console.log('track of sender', sender.track);
             // }
             // if (senders.length === 0) {
             //     // just add all tracks to the peer connection
@@ -825,7 +829,7 @@ export class Connection {
                 // console.log('before sentVideoUpdated: cloned', cloned, 'this.outStream', this.outStream);
                 assert((cloned != null) === this.sendingVideo);
                 this.sentVideoUpdated(cloned);
-    
+
             }
         }
     }
@@ -908,10 +912,6 @@ export class Connection {
                             break;
 
                         case 'AcceptClicked':
-                            this.fireEvent<ReceivedCallDlg>({
-                                type: 'ReceivedCallDlg',
-                                props: null
-                            });
                             this.setWithVideo(withVideoFromProps(props));
                             loop = false;
                             break;
@@ -919,10 +919,6 @@ export class Connection {
 
                         case 'HangUpClicked':
                             if (e.remoteUser === this.remoteUser) {
-                                this.fireEvent<ReceivedCallDlg>({
-                                    type: 'ReceivedCallDlg',
-                                    props: null
-                                });
                                 this.setWithVideo(null);
                                 loop = false;
                             } else {
@@ -932,24 +928,24 @@ export class Connection {
 
                         case 'RemoteHangUp':
                             if (e.remoteUser === this.remoteUser) {
-                                this.fireEvent<ReceivedCallDlg>({
-                                    type: 'ReceivedCallDlg',
-                                    props: null
-                                });
                                 loop = false;
                             }
                             break;
 
                         case 'RegularFunctionsShutdown':
-                            this.fireEvent<ReceivedCallDlg>({
-                                type: 'ReceivedCallDlg',
-                                props: null
-                            });
                             loop = false;
                             break;
                     }
                 }
+            } catch (reason: any) {
+                if (reason.name !== 'AbortError') {
+                    throw reason;
+                }
             } finally {
+                this.fireEvent<ReceivedCallDlg>({
+                    type: 'ReceivedCallDlg',
+                    props: null
+                });
                 subscr.unsubscribe();
             }
         }
@@ -999,9 +995,10 @@ export class Connection {
 
     async shutdownAndJoin(): Promise<void> {
         this.abortController.signal.throwIfAborted();
-        this.sendRemoteMsg({
-            type: 'hangUp'
-        })
+        // this.sendRemoteMsg({
+        //     type: 'hangUp'
+        // })
+        // console.log('connection sent hangUp')
         this.rawHangUp();
         // doch nix zu "joinen"
     }
@@ -1042,6 +1039,7 @@ export class Connection {
     private outStream: MediaStream | null = null;
     private resolveNextRemoteMsg: ((msg: RemoteMsg) => void) | null = null;
     private messages: string[] = [];
+    private outerSignal: AbortSignal;
 }
 
 export class ConnectionOld {
@@ -1150,10 +1148,6 @@ export class ConnectionOld {
                             break;
 
                         case 'AcceptClicked':
-                            this.fireEvent<ReceivedCallDlg>({
-                                type: 'ReceivedCallDlg',
-                                props: null
-                            });
                             this.setWithVideo(withVideoFromProps(props));
                             loop = false;
                             break;
@@ -1161,10 +1155,6 @@ export class ConnectionOld {
 
                         case 'HangUpClicked':
                             if (e.remoteUser === this.remoteUser) {
-                                this.fireEvent<ReceivedCallDlg>({
-                                    type: 'ReceivedCallDlg',
-                                    props: null
-                                });
                                 this.setWithVideo(null);
                                 loop = false;
                             } else {
@@ -1174,24 +1164,20 @@ export class ConnectionOld {
 
                         case 'RemoteHangUp':
                             if (e.remoteUser === this.remoteUser) {
-                                this.fireEvent<ReceivedCallDlg>({
-                                    type: 'ReceivedCallDlg',
-                                    props: null
-                                });
                                 loop = false;
                             }
                             break;
 
                         case 'RegularFunctionsShutdown':
-                            this.fireEvent<ReceivedCallDlg>({
-                                type: 'ReceivedCallDlg',
-                                props: null
-                            });
                             loop = false;
                             break;
                     }
                 }
             } finally {
+                this.fireEvent<ReceivedCallDlg>({
+                    type: 'ReceivedCallDlg',
+                    props: null
+                });
                 subscr.unsubscribe();
             }
         }

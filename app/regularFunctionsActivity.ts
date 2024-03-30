@@ -58,7 +58,14 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }
     }
 
-    async function manageCalls(signal: AbortSignal, sendMs: number, receiveMs: number): Promise<void> {
+    /**
+     * @returns connected remote users after shutdown
+     * @param signal 
+     * @param sendMs 
+     * @param receiveMs 
+     * @param msgClient 
+     */
+    async function manageCalls(signal: AbortSignal, sendMs: number, receiveMs: number, msgClient: MsgClient): Promise<string[]> {
 
         function onClosedConnection(remoteUser: string) {
             delete connections[remoteUser];
@@ -223,14 +230,14 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 // helping functions
                 //
 
-                function authenticate(req: MsgReq): AuthenticatedVideoReq<MsgReq> {
-                    return {
-                        type: 'authenticatedVideoReq',
-                        ownUser: user,
-                        sessionToken: token,
-                        req: req
-                    }
-                }
+                // function authenticate(req: MsgReq): AuthenticatedVideoReq<MsgReq> {
+                //     return {
+                //         type: 'authenticatedVideoReq',
+                //         ownUser: user,
+                //         sessionToken: token,
+                //         req: req
+                //     }
+                // }
 
                 function forwardToConnections(resp: ApiResp<MsgResp>) {
                     if (resp.type === 'error') throw new Error(resp.error);
@@ -876,8 +883,6 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             }
         }
 
-        const msgClient = new MsgClient(user, 0);
-
         const connections: {
             [remoteUser: string]: Connection
         } = {}
@@ -928,7 +933,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         // } finally {
         //     subscr.unsubscribe();
         // }
-
+        let consAtShutdown: string[];
         {
             let shutdown = false;
             const subscr = eventBus.subscribe();
@@ -943,6 +948,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 subscr.unsubscribe();
             }
 
+            consAtShutdown = Object.keys(connections);
             let cons: Connection[] = [];
             let maxTries = 5;
             do {
@@ -954,11 +960,13 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }
 
         await Promise.all([transportMessagesProm, queuedInteractionsProm, localVideoProm])
+        return consAtShutdown;
     }
 
     async function managePushNotifications(signal: AbortSignal) {
         nyi();
     }
+
 
     async function manageLogoutAndAuthFailed(signal: AbortSignal) {
         while (true) {
@@ -988,20 +996,52 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         eventBus.publish(e);
     }
 
-    let result: null | LogoutClicked | AuthFailed = null;
+    function authenticate(req: MsgReq): AuthenticatedVideoReq<MsgReq> {
+        return {
+            type: 'authenticatedVideoReq',
+            ownUser: user,
+            sessionToken: token,
+            req: req
+        }
+    }
+
     let regularFunctionsShutdown = false;
     let pushNotificationsShutdown = false;
     let handlingFetchError = false;
 
     // fork
     const manageLogoutAndAuthFailedProm = manageLogoutAndAuthFailed(outerSignal);
-    return (await Promise.all([
+
+    const msgClient = new MsgClient(user, 0);
+
+    const result =  (await Promise.all([
         manageLogoutAndAuthFailedProm,
         manageVideoConfig(outerSignal),
-        manageCalls(outerSignal, 200, 2000),
+        manageCalls(outerSignal, 200, 2000, msgClient),
         managePushNotifications(outerSignal),
-    ]))[0];
-
+    ]));
+    if (result[0].type === 'LogoutClicked') {
+        // send hangup for all open connections
+        for (const remoteUser of result[2]) {
+            const msg: RemoteMsg = {
+                type: 'hangUp'
+            }
+            msgClient.addToSend(remoteUser, [JSON.stringify(msg)]);
+        }
+        const req = msgClient.createReq();
+        console.log('req created by msgClient', req);
+        const resp = await accumulatedFetching.push<AuthenticatedVideoReq<MsgReq>, ApiResp<MsgResp>>(authenticate(req),
+        outerSignal)
+        switch (resp.type) {
+            case 'success':
+                console.log('rcv', resp.rcv);
+                break;
+            case 'error':
+                console.error(resp);
+        }
+    }
+    
+    return result[0];
 
 
 
