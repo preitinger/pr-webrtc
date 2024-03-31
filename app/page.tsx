@@ -8,7 +8,7 @@ import { getEventBus, useEventBus } from "./useEventBus";
 import styles from './page.module.css'
 import Image from "next/image";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
-import { StartPageProps, RegisterClicked, LoginClicked, LoginOrRegisterDlgProps, LoginOrRegisterOk, CancelClicked, StartPage, LoginDlg, Busy, FetchError, TryAgainClicked, RegisterDlg, RegularPage, RegularPageProps, CallClicked/* , SetCallButtonText */, SetFetchErrorState, ChatStart, ChatStop, AuthFailed, AuthFailedDlg, EmptyPropsOrNull, CloseClicked, UseHereClicked, ChatAddErrorLine, FetchingSetInterrupted, LogoutClicked, WaitForPushClicked, SetupPushDlg, OkClicked, SetupPushProps, AwaitPushDlg, DecideIfWithVideoDlg, DecideIfWithVideoProps, SendVideoChanged, ReceiveVideoChanged, VideoConfigValue, ConfigSendVideoChanged, ConfigReceiveVideoChanged, SetCallActive, ModalDlg, VideoDataSettingsClicked, LocalMediaStream, HandlingFetchError, CameraTestClicked, SetCameraTestButton, ChatAddHintLine, ConnectionProps, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, ReceivedCallProps, AcceptClicked, HangUpClicked, HangUpProps, HangUpDlg, HangUp } from "./busEvents";
+import { StartPageProps, RegisterClicked, LoginClicked, LoginOrRegisterDlgProps, LoginOrRegisterOk, CancelClicked, StartPage, LoginDlg, Busy, FetchError, TryAgainClicked, RegisterDlg, RegularPage, RegularPageProps, CallClicked/* , SetCallButtonText */, SetFetchErrorState, ChatStart, ChatStop, AuthFailed, AuthFailedDlg, EmptyPropsOrNull, CloseClicked, UseHereClicked, ChatAddErrorLine, FetchingSetInterrupted, LogoutClicked, WaitForPushClicked, SetupPushDlg, OkClicked, SetupPushProps, AwaitPushDlg, DecideIfWithVideoDlg, DecideIfWithVideoProps, SendVideoChanged, ReceiveVideoChanged, VideoConfigValue, ConfigSendVideoChanged, ConfigReceiveVideoChanged, SetCallActive, ModalDlg, VideoDataSettingsClicked, LocalMediaStream, HandlingFetchError, CameraTestClicked, SetCameraTestButton, ChatAddHintLine, ConnectionProps, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, ReceivedCallProps, AcceptClicked, HangUpClicked, HangUpProps, HangUpDlg, HangUp, ConfigChanged } from "./busEvents";
 import { ChatPanelComp, MultiSelectChatUserListComp, useMultiSelectChat } from "./_lib/chat/chat-client";
 import assert from "assert";
 import timeout from "./_lib/pr-timeout/pr-timeout";
@@ -279,10 +279,12 @@ function VideoConfigInputComp(props: VideoConfigInputProps) {
 interface VideoConfigProps {
     initialSendVideo: VideoConfigValue;
     initialReceiveVideo: VideoConfigValue;
+    initialFitToDisplay: boolean;
 }
-function VideoConfigComp({ initialSendVideo, initialReceiveVideo }: VideoConfigProps) {
+function VideoConfigComp({ initialSendVideo, initialReceiveVideo, initialFitToDisplay }: VideoConfigProps) {
     const [sendVideo, setSendVideo] = useState<VideoConfigValue>(initialSendVideo)
     const [receiveVideo, setReceiveVideo] = useState<VideoConfigValue>(initialReceiveVideo)
+    const [fitToDisplay, setFitToDisplay] = useState<boolean>(initialFitToDisplay)
 
     function onSendChange(e: ChangeEvent<HTMLInputElement>) {
         const val = VideoConfigValue.check(e.target.value)
@@ -300,6 +302,18 @@ function VideoConfigComp({ initialSendVideo, initialReceiveVideo }: VideoConfigP
             type: 'ConfigReceiveVideoChanged',
             receiveVideo: val
         })
+    }
+
+    const onChange = (name: string) => (e: ChangeEvent<HTMLInputElement>) => {
+        const checked = e.target.checked;
+        switch (name) {
+            case 'fitToDisplay': setFitToDisplay(checked); break;
+        }
+        fireEvent<ConfigChanged>({
+            type: 'ConfigChanged',
+            name: name,
+            checked: checked
+        });
     }
 
     function checked(name: 'send' | 'receive', value: VideoConfigValue): boolean {
@@ -331,11 +345,18 @@ function VideoConfigComp({ initialSendVideo, initialReceiveVideo }: VideoConfigP
     }
 
     return (
-        <fieldset className={styles.videoConfigSet}>
-            <legend>Video configuration</legend>
-            {generateFieldSet('send')}
-            {generateFieldSet('receive')}
-        </fieldset>
+        <div>
+            <fieldset className={styles.videoConfigSet}>
+                <legend>Video configuration</legend>
+                {generateFieldSet('send')}
+                {generateFieldSet('receive')}
+            </fieldset>
+            <div>
+                <input id='fitToDisplay' type='checkbox' checked={fitToDisplay} onChange={onChange('fitToDisplay')} />
+                <label htmlFor='fitToDisplay'>Fit all videos to display
+                </label>
+            </div>
+        </div>
     )
 }
 
@@ -364,23 +385,26 @@ function DecideIfWithVideoDlgComp(props: DecideIfWithVideoProps) {
         })
     }
 
+    const entries = Object.entries(props.decisions);
+
     return (
         <div className={styles.dlg}>
             <h4>Video Settings For Connections</h4>
             {
-                Object.entries(props.decisions).map(([remoteUser, decision]) => (
-                    <div key={remoteUser} className={styles.withVideo}>
-                        <div>
-                            <input id={`sendVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.send} onChange={sendChanged(remoteUser)} />
-                            <label htmlFor={`sendVideo-${remoteUser}`}>Offer to <b>send</b> video to <b>{remoteUser}</b>
-                            </label>
+                entries.length === 0 ? <p><i>No connections</i></p> :
+                    entries.map(([remoteUser, decision]) => (
+                        <div key={remoteUser} className={styles.withVideo}>
+                            <div>
+                                <input id={`sendVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.send} onChange={sendChanged(remoteUser)} />
+                                <label htmlFor={`sendVideo-${remoteUser}`}>Offer to <b>send</b> video to <b>{remoteUser}</b>
+                                </label>
+                            </div>
+                            <div>
+                                <input id={`receiveVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.receive} onChange={receiveChanged(remoteUser)} />
+                                <label htmlFor={`receiveVideo-${remoteUser}`}>Offer to <b>receive</b> video from <b>{remoteUser}</b></label>
+                            </div>
                         </div>
-                        <div>
-                            <input id={`receiveVideo-${remoteUser}`} type='checkbox' checked={decision.withVideo.receive} onChange={receiveChanged(remoteUser)} />
-                            <label htmlFor={`receiveVideo-${remoteUser}`}>Offer to <b>receive</b> video from <b>{remoteUser}</b></label>
-                        </div>
-                    </div>
-                ))
+                    ))
             }
             <ButtonRow>
                 <button onClick={() => fireEvent<OkClicked>({
@@ -414,7 +438,7 @@ function HangUpDlgComp(props: HangUpProps) {
         <div className={styles.dlg}>
             <h4>Hang Up ?</h4>
             <MultiSelectChatUserListComp label='Select the connections to hang up:' emptyLabel='No active connections' small={true} userListState={({
-                users: props.remoteUsers.map(remoteUser => ({name: remoteUser})),
+                users: props.remoteUsers.map(remoteUser => ({ name: remoteUser })),
                 selected: selected
             })} onClick={onUserClick} onKey={(e) => {
                 console.error('nyi');
@@ -432,11 +456,20 @@ function HangUpDlgComp(props: HangUpProps) {
     )
 }
 
-function ConnectionComp(props: ConnectionProps) {
+function ConnectionComp(props: ConnectionProps & { maxWidth: string, maxHeight: string }) {
+    const stream = props.stream as MediaStream | null
     return (
-        <div className={styles.connectionComp}>
-            {props.msg != null ? <p>{props.msg}</p> : <span>{props.remoteUser}</span>}
-            {props.stream != null && <VideoComp mediaStream={props.stream as MediaStream} />}
+        <div className={styles.connectionComp}/*  style={{ maxWidth: props.maxWidth, maxHeight: props.maxHeight }} */>
+            {props.msg != null ? <p className={styles.connectionCompParagraph}>{props.msg}</p> : <p className={styles.connectionCompParagraph}>{props.remoteUser}</p>}
+            {
+                (stream == null || stream.getVideoTracks().length === 0) && <p><i>No video from {props.remoteUser}</i></p>
+            }
+            {props.stream != null &&
+                <div className={styles.connectionCompItem}>
+                    {/* <div className={styles.fakeVideoComp}>Fake Video Comp</div> */}
+                    <VideoComp mediaStream={props.stream as MediaStream} width={props.maxWidth} height={props.maxHeight} />
+                </div>
+            }
         </div>
     )
 }
@@ -452,16 +485,58 @@ type ConnectionsProps = rt.Static<typeof ConnectionsProps>
 //     }
 // }
 
-function ConnectionsComp(props: ConnectionsProps) {
+function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStream }) {
     const valList = Object.values(props.connections)
+    const n = (props.localMediaStream != null ? 1 : 0) + valList.length;
+    const columns = Math.ceil(Math.sqrt(n));
+    console.log('columns', columns)
+    const rows = Math.ceil(n / columns)
+    const connectionsRows: JSX.Element[] = [
+
+    ];
+    const maxWidth = `calc(${100 / columns}vw - 1rem)`
+    const maxHeight = `calc(${100 / rows}vh - ${rows * 1.5 + 1}rem)`
+    console.log('maxWidth', maxWidth, 'maxHeight', maxHeight)
+
+    let i = 0;
+
+    for (let row = 0; row < rows; ++row) {
+        const comps: JSX.Element[] = [];
+        for (let column = 0; column < columns; ++column) {
+            if (row === 0 && column === 0 && props.localMediaStream != null) {
+                comps.push(
+                    <VideoComp key='$local$' mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
+                )
+            } else {
+                if (i >= valList.length) continue;
+                const c = valList[i++];
+                comps.push(
+                    <ConnectionComp key={c.remoteUser} {...c} maxWidth={maxWidth} maxHeight={maxHeight} />
+                )
+    
+            }
+        }
+        connectionsRows.push(
+            <div className={styles.connectionsRow}>
+                {comps}
+            </div>
+        )
+    }
+
     return (
-        <div>
-            <p className={styles.comment}></p>
-            {
+        <div className={styles.connectionsComp}>
+            {connectionsRows}
+            {/* {
                 valList.map(c => (
+                    // <div key={c.remoteUser} className={styles.fakeConnectionComp}>
+                    //     {c.remoteUser}
+                    //     <div className={styles.fakeVideo}>
+                    //         Fake Video
+                    //     </div>
+                    // </div>
                     <ConnectionComp key={c.remoteUser} {...c} />
                 ))
-            }
+            } */}
         </div>
     )
 }
@@ -516,6 +591,48 @@ function ReceivedCallComp(props: ReceivedCallProps) {
     )
 }
 
+
+function menuItemClassName(option: ViewOption, activeOption: ViewOption) {
+    let s = option === activeOption ? styles.activeMenu + ' ' : '';
+    return s + menuItemClassName1(option);
+}
+
+function menuItemClassName1(option: ViewOption) {
+    return styles['button-' + option];
+}
+
+interface TopMenuItemProps {
+    option: ViewOption
+    activeOption: ViewOption;
+    onClick: (option: ViewOption) => () => void;
+}
+function TopMenuItem(props: PropsWithChildren<TopMenuItemProps>) {
+    return (
+        <div className={`${styles.topMenuButtonWrapper} ${props.option === props.activeOption ? styles.activeMenu : ''}`}>
+            <button className={menuItemClassName(props.option, props.activeOption)}
+                onClick={props.onClick(props.option)}>
+                {props.children}
+            </button>
+        </div>
+    )
+}
+
+interface OptionPageProps {
+    option: ViewOption;
+    active: ViewOption;
+    notLoggedIn?: boolean
+}
+function OptionPage(props: PropsWithChildren<OptionPageProps>) {
+    return (
+        <>
+            {props.option === props.active &&
+                (props.notLoggedIn ? <p>You are not logged in.</p>
+                    : props.children)
+            }
+        </>
+    )
+}
+
 const busyTardyFlagProps = {
     initialValue: false, timeoutDelays: {
         minInvisible: 0,
@@ -535,6 +652,8 @@ function initialConnectionsProps(): ConnectionsProps {
         connections: {}
     }
 }
+
+type ViewOption = 'old' | 'users' | 'config' | 'chat' | 'video';
 
 export default function Page() {
     const [startPageProps, setStartPageProps] = useState<StartPageProps | null>(null);
@@ -569,6 +688,7 @@ export default function Page() {
     const [connectionsProps, setConnectionsProps] = useState<ConnectionsProps>(initialConnectionsProps())
     const [receivedCallProps, setReceivedCallProps] = useState<ReceivedCallProps | null>(null);
     const [hangUpProps, setHangUpProps] = useState<HangUpProps | null>(null);
+    const [viewOption, setViewOption] = useState<ViewOption>('old');
 
     useEffect(() => {
         // console.log('starting main effect with routeActivity()')
@@ -604,7 +724,7 @@ export default function Page() {
                     throwIfAborted();
                     const e: any = await subscr.nextEvent();
                     throwIfAborted();
-                    // console.log('handleEvents got', ('type' in e ? e.type : ''), e);
+                    console.log('handleEvents got', ('type' in e ? e.type : ''), e);
                     if (MyEvents.guard(e)) {
                         switch (e.type) {
                             case 'StartPage':
@@ -798,158 +918,207 @@ export default function Page() {
         }
     </>
 
+    const onTopMenuItemClick = (option: ViewOption) => () => {
+        setViewOption(option);
+    }
+
     return (
-        <div>
-            <header className={styles.header}>
-                {/* <div className={styles.inlineBlock}>
-                <h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+        <>
+            <div className={styles.topMenu}>
+                <TopMenuItem option='old' activeOption={viewOption} onClick={onTopMenuItemClick}>Old view</TopMenuItem>
+                {(['users', 'config', 'chat', 'video'] as ViewOption[]).map(option => (
+                    <TopMenuItem key={option} option={option} activeOption={viewOption} onClick={onTopMenuItemClick} />
+                ))}
+                {/* <button className={menuItemClassName('old')} onClick={() => { setViewOption('old') }}>Old view</button> */}
+                {/* <button className={menuItemClassName('config')} onClick={() => {
+                    setViewOption('config')
+                }} />
+                <button className={menuItemClassName('chat')} onClick={() => {
+                    setViewOption('chat')
+                }} />
+                <button className={menuItemClassName('video')} onClick={() => {
+                    setViewOption('video')
+                }} /> */}
             </div>
-            {
-                regularPageProps != null &&
-                <div className={`${styles.inlineBlock}`}>
-                    <div className={`${styles.inlineBlock}`}>
-                        <button className={styles.redButton}>Logout</button>
-                    </div>
-                    <div className={styles.inlineBlock}>
-                        <button>Wait for push notification ...</button>
-                    </div>
+            <OptionPage option={'users'} active={viewOption} notLoggedIn={regularPageProps == null}>
+                <MultiSelectChatUserListComp
+                    userListState={chat.userList}
+                    small={callActive}
+                    onKey={(e) => {
+                        throw new Error('nyi');
+                    }}
+                    onClick={chatOnUserClick} />
+            </OptionPage>
+            <OptionPage option={'config'} active={viewOption} notLoggedIn={regularPageProps == null}>
+                {regularPageProps != null &&
+                    <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo}
+                        initialFitToDisplay={regularPageProps.fitToDisplay} />
+                }
+            </OptionPage>
+            <OptionPage option='chat' active={viewOption} notLoggedIn={regularPageProps == null}>
+                <div className={styles.flexColumn}>
+                    {chatComponents}
                 </div>
-            } */}
+            </OptionPage>
+            <OptionPage option='video' active={viewOption} notLoggedIn={regularPageProps == null}>
+                <ConnectionsComp {...connectionsProps} />
+            </OptionPage>
+            <OptionPage option='old' active={viewOption}>
+                <div>
+
+                    <header className={styles.header}>
+                        {/* <div className={styles.inlineBlock}>
+<h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+</div>
+{
+regularPageProps != null &&
+<div className={`${styles.inlineBlock}`}>
+<div className={`${styles.inlineBlock}`}>
+    <button className={styles.redButton}>Logout</button>
+</div>
+<div className={styles.inlineBlock}>
+    <button>Wait for push notification ...</button>
+</div>
+</div>
+} */}
 
 
-                <div className={styles.headerSub}>
-                    <div>
-                        <h4>pr-webRTC</h4>
-                        <h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
-                    </div>
+                        <div className={styles.headerSub}>
+                            <div>
+                                <h4>pr-webRTC</h4>
+                                <h5>a demonstration of video/audio calls by Peter Reitinger inspired by the documention on WebRTC on MDN</h5>
+                            </div>
+
+                            {
+                                regularPageProps != null && fetchError == null &&
+                                <div className={styles.flexRow}>
+                                    <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
+                                        type: 'LogoutClicked',
+                                    })
+                                    }>Logout</button>
+                                    <button onClick={() => fireEvent<WaitForPushClicked>({
+                                        type: 'WaitForPushClicked',
+                                    })
+                                    }>Wait for push notification ...</button>
+                                </div>
+                            }
+                        </div>
+                    </header>
+                    {startPageProps != null && <StartPageComp {...startPageProps} />}
+                    {loginDlgProps != null && <LoginDlgComp {...loginDlgProps} />}
+                    {registerDlgProps != null && <RegisterDlgComp {...registerDlgProps} />}
+                    {/* {
+fetchErrorDuringLogin != null &&
+<ShowFetchErrorDuringLoginComp error={fetchErrorDuringLogin} />
+} */}
+                    <main className={styles.main}>
+                        {busyVisible && busyComment != null && <div>
+                            <h1>Busy ...</h1>
+                            <p>{busyComment}</p>
+                        </div>}
+                        {authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                            fireEvent<CloseClicked>({
+                                type: 'CloseClicked',
+                            })
+
+                        } onUseHere={() => fireEvent<UseHereClicked>({
+                            type: 'UseHereClicked',
+                        })
+                        } />}
+                        {
+                            setupPushProps != null &&
+                            <SetupPushComp {...setupPushProps} onOk={() => fireEvent<OkClicked>({
+                                type: 'OkClicked',
+                            })
+                            } onCancel={() => fireEvent<CancelClicked>({
+                                type: 'CancelClicked',
+                            })
+                            } onTryAgain={() => fireEvent<TryAgainClicked>({
+                                type: 'TryAgainClicked',
+                            })
+                            } />
+                        }
+                        {
+                            awaitPushProps != null &&
+                            <AwaitPushComp {...awaitPushProps} onCancel={() => fireEvent<CancelClicked>({
+                                type: 'CancelClicked',
+                            })
+                            } />
+                        }
+                        {regularPageProps != null &&
+                            <>
+                                <div className={styles.left}>
+                                    <MultiSelectChatUserListComp
+                                        userListState={chat.userList}
+                                        small={callActive}
+                                        onKey={(e) => {
+                                            throw new Error('nyi');
+                                        }}
+                                        onClick={chatOnUserClick} />
+                                    <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
+                                        fireEvent<CallClicked>({
+                                            type: 'CallClicked',
+                                            callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
+                                        })
+
+                                    } />
+                                    <button className={styles.reject} onClick={() => {
+                                        fireEvent<HangUpClicked>({
+                                            type: 'HangUpClicked',
+                                            remoteUser: null
+                                        });
+                                    }} />
+                                    {
+                                        cameraTestButtonText != null &&
+                                        <button onClick={() => fireEvent<CameraTestClicked>({
+                                            type: 'CameraTestClicked',
+                                        })
+                                        }>{cameraTestButtonText}</button>
+                                    }
+                                    {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
+                                    <button onClick={() => fireEvent<VideoDataSettingsClicked>({
+                                        type: 'VideoDataSettingsClicked',
+                                    })
+                                    }>Video settings for individual connections ...</button>
+                                    {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
+                                    {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+                                    <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo}
+                                        initialFitToDisplay={regularPageProps.fitToDisplay} />
+                                    {callActive && chatComponents}
+
+                                </div>
+                                <div className={styles.right}>
+                                    {!callActive && chatComponents}
+                                    {
+                                        localMediaStream != null &&
+                                        <VideoComp mediaStream={localMediaStream} />
+                                    }
+                                    <p className={styles.comment}>Hierunter folgt ConnectionsComp</p>
+                                    <ConnectionsComp {...connectionsProps} />
+                                </div>
+                            </>
+                        }
+                    </main>
 
                     {
-                        regularPageProps != null && fetchError == null &&
-                        <div className={styles.flexRow}>
-                            <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
-                                type: 'LogoutClicked',
-                            })
-                            }>Logout</button>
-                            <button onClick={() => fireEvent<WaitForPushClicked>({
-                                type: 'WaitForPushClicked',
-                            })
-                            }>Wait for push notification ...</button>
-                        </div>
+                        modalMsg != null &&
+                        <ModalDialog >
+                            <p>{modalMsg}</p>
+                            <ButtonRow><button onClick={() => {
+                                setModalMsg(null); fireEvent<OkClicked>({
+                                    type: 'OkClicked',
+                                })
+                            }
+                            }>OK</button></ButtonRow>
+                        </ModalDialog>
+                    }
+
+                    {
+                        fetchError != null &&
+                        <FetchErrorComp error={fetchError} />
                     }
                 </div>
-            </header>
-            {startPageProps != null && <StartPageComp {...startPageProps} />}
-            {loginDlgProps != null && <LoginDlgComp {...loginDlgProps} />}
-            {registerDlgProps != null && <RegisterDlgComp {...registerDlgProps} />}
-            {/* {
-                fetchErrorDuringLogin != null &&
-                <ShowFetchErrorDuringLoginComp error={fetchErrorDuringLogin} />
-            } */}
-            <main className={styles.main}>
-                {busyVisible && busyComment != null && <div>
-                    <h1>Busy ...</h1>
-                    <p>{busyComment}</p>
-                </div>}
-                {authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
-                    fireEvent<CloseClicked>({
-                        type: 'CloseClicked',
-                    })
-
-                } onUseHere={() => fireEvent<UseHereClicked>({
-                    type: 'UseHereClicked',
-                })
-                } />}
-                {
-                    setupPushProps != null &&
-                    <SetupPushComp {...setupPushProps} onOk={() => fireEvent<OkClicked>({
-                        type: 'OkClicked',
-                    })
-                    } onCancel={() => fireEvent<CancelClicked>({
-                        type: 'CancelClicked',
-                    })
-                    } onTryAgain={() => fireEvent<TryAgainClicked>({
-                        type: 'TryAgainClicked',
-                    })
-                    } />
-                }
-                {
-                    awaitPushProps != null &&
-                    <AwaitPushComp {...awaitPushProps} onCancel={() => fireEvent<CancelClicked>({
-                        type: 'CancelClicked',
-                    })
-                    } />
-                }
-                {regularPageProps != null &&
-                    <>
-                        <div className={styles.left}>
-                            <MultiSelectChatUserListComp
-                                userListState={chat.userList}
-                                small={callActive}
-                                onKey={(e) => {
-                                    throw new Error('nyi');
-                                }}
-                                onClick={chatOnUserClick} />
-                            <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
-                                fireEvent<CallClicked>({
-                                    type: 'CallClicked',
-                                    callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
-                                })
-
-                            } />
-                            <button className={styles.reject} onClick={() => {
-                                fireEvent<HangUpClicked>({
-                                    type: 'HangUpClicked',
-                                    remoteUser: null
-                                });
-                            }} />
-                            {
-                                cameraTestButtonText != null &&
-                                <button onClick={() => fireEvent<CameraTestClicked>({
-                                    type: 'CameraTestClicked',
-                                })
-                                }>{cameraTestButtonText}</button>
-                            }
-                            {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
-                            <button onClick={() => fireEvent<VideoDataSettingsClicked>({
-                                type: 'VideoDataSettingsClicked',
-                            })
-                            }>Video settings for individual connections ...</button>
-                            {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
-                            {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
-                            <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo} />
-                            {callActive && chatComponents}
-
-                        </div>
-                        <div className={styles.right}>
-                            {!callActive && chatComponents}
-                            {
-                                localMediaStream != null &&
-                                <VideoComp mediaStream={localMediaStream} />
-                            }
-                            <p className={styles.comment}>Hierunter folgt ConnectionsComp</p>
-                            <ConnectionsComp {...connectionsProps} />
-                        </div>
-                    </>
-                }
-            </main>
-
-            {
-                modalMsg != null &&
-                <ModalDialog >
-                    <p>{modalMsg}</p>
-                    <ButtonRow><button onClick={() => {
-                        setModalMsg(null); fireEvent<OkClicked>({
-                            type: 'OkClicked',
-                        })
-                    }
-                    }>OK</button></ButtonRow>
-                </ModalDialog>
-            }
-
-            {
-                fetchError != null &&
-                <FetchErrorComp error={fetchError} />
-            }
-        </div>
+            </OptionPage>
+        </>
     )
 }

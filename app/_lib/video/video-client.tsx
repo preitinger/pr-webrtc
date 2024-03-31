@@ -24,6 +24,8 @@ import { ChatAddErrorLine } from "@/app/busEvents";
 export interface VideoProps {
     mediaStream: MediaStream | null;
     showConnecting?: boolean
+    width?: string;
+    height?: string;
 }
 
 export const VideoComp = (props: VideoProps) => {
@@ -45,7 +47,7 @@ export const VideoComp = (props: VideoProps) => {
     return (
         props.mediaStream == null && props.showConnecting ?
             <p>Connecting ...</p> :
-            <video className={styles.video} ref={videoRef} autoPlay={true} />
+            <video className={styles.video} ref={videoRef} autoPlay={true} style={{maxWidth: props.width, maxHeight: props.height}} />
     )
 }
 

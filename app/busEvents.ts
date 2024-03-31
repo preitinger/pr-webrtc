@@ -183,7 +183,8 @@ export type VideoConfigValue = rt.Static<typeof VideoConfigValue>
 
 export const RegularPageProps = rt.Record({
     sendVideo: VideoConfigValue,
-    receiveVideo: VideoConfigValue
+    receiveVideo: VideoConfigValue,
+    fitToDisplay: rt.Boolean
 })
 export type RegularPageProps = rt.Static<typeof RegularPageProps>
 
@@ -198,6 +199,13 @@ export const ConfigReceiveVideoChanged = rt.Record({
     receiveVideo: VideoConfigValue
 })
 export type ConfigReceiveVideoChanged = rt.Static<typeof ConfigReceiveVideoChanged>
+
+export const ConfigChanged = rt.Record({
+    type: rt.Literal('ConfigChanged'),
+    name: rt.String,
+    checked: rt.Boolean
+})
+export type ConfigChanged = rt.Static<typeof ConfigChanged>
 
 export const RegularPage = rt.Record({
     type: rt.Literal('RegularPage'),

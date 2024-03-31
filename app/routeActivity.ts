@@ -411,11 +411,13 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
         })
         const sendVideo = localStorageAccess.videoConfig.send.get(user)
         const receiveVideo = localStorageAccess.videoConfig.receive.get(user)
+        const fitToDisplay = localStorageAccess.fitToDisplay.get(user)
         fireEvent<RegularPage>({
             type: 'RegularPage',
             props: {
                 sendVideo: sendVideo,
-                receiveVideo: receiveVideo
+                receiveVideo: receiveVideo,
+                fitToDisplay: fitToDisplay
             }
         })
 
@@ -1036,7 +1038,8 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
             type: 'RegularPage',
             props: {
                 sendVideo: 'individually',
-                receiveVideo: 'always'
+                receiveVideo: 'always',
+                fitToDisplay: false
             }
         })
 

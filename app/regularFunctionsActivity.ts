@@ -267,6 +267,12 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                 addToSend(remoteUser, [msg]);
                             }
 
+                            if (Object.keys(connections).length === 0) {
+                                fireEvent<SetCallActive>({
+                                    type: 'SetCallActive',
+                                    active: true
+                                });
+                            }
                             connections[remoteUser] = new Connection(
                                 sentVideoUpdated,
                                 closed,
@@ -422,7 +428,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                                 })
                                             });
                                             break;
-    
+
                                         case 'ReceiveVideoChanged':
                                             fireEvent<DecideIfWithVideoDlg>({
                                                 type: 'DecideIfWithVideoDlg',
@@ -441,7 +447,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                                 })
                                             });
                                             break;
-    
+
                                         case 'OkClicked':
                                             type Entry = [string, VideoDecision];
                                             const values: VideoDecision[] = (Object.values(props.decisions))
@@ -458,7 +464,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                             });
                                             loop = false;
                                             break;
-    
+
                                         case 'CancelClicked':
                                         // no break
                                         case 'RegularFunctionsShutdown':
@@ -468,9 +474,9 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                             });
                                             loop = false;
                                             break;
-    
+
                                     }
-    
+
                                 }
                             } finally {
                                 subscr.unsubscribe();
@@ -490,7 +496,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                 const subscr = eventBus.subscribe();
                                 try {
                                     const MyEvent = rt.Union(HangUp, CancelClicked, RegularFunctionsShutdown)
-                                    await waitForGuard({subscr: subscr}, MyEvent, signal);
+                                    await waitForGuard({ subscr: subscr }, MyEvent, signal);
                                     fireEvent<HangUpDlg>({
                                         type: 'HangUpDlg',
                                         props: null
@@ -939,7 +945,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             const subscr = eventBus.subscribe();
             try {
                 while (!shutdown) {
-                    const e = await waitForGuard({subscr: subscr}, RegularFunctionsShutdown, signal);
+                    const e = await waitForGuard({ subscr: subscr }, RegularFunctionsShutdown, signal);
                     if (e.type === 'RegularFunctionsShutdown') {
                         shutdown = true;
                     }
@@ -1014,7 +1020,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
     const msgClient = new MsgClient(user, 0);
 
-    const result =  (await Promise.all([
+    const result = (await Promise.all([
         manageLogoutAndAuthFailedProm,
         manageVideoConfig(outerSignal),
         manageCalls(outerSignal, 200, 2000, msgClient),
@@ -1031,7 +1037,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         const req = msgClient.createReq();
         console.log('req created by msgClient', req);
         const resp = await accumulatedFetching.push<AuthenticatedVideoReq<MsgReq>, ApiResp<MsgResp>>(authenticate(req),
-        outerSignal)
+            outerSignal)
         switch (resp.type) {
             case 'success':
                 console.log('rcv', resp.rcv);
@@ -1040,7 +1046,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 console.error(resp);
         }
     }
-    
+
     return result[0];
 
 

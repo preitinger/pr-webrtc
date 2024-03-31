@@ -41,3 +41,14 @@ export const lastVideoSettings = {
     send: lastVideoSettingsSetGet('send'),
     receive: lastVideoSettingsSetGet('receive')
 }
+
+function fitToDisplayKey(user: string) {
+    return `${user}.fitToDisplay`;
+}
+
+export const fitToDisplay = {
+    set: (user: string, value: boolean) => {
+        localStorage[fitToDisplayKey(user)] = JSON.stringify(value)
+    },
+    get: (user: string): boolean => localStorage[fitToDisplayKey(user)] ?? false
+}
