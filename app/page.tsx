@@ -961,7 +961,7 @@ export default function Page() {
                 </div>
             </OptionPage>
             <OptionPage option='video' active={viewOption} notLoggedIn={regularPageProps == null}>
-                <ConnectionsComp {...connectionsProps} />
+                <ConnectionsComp {...connectionsProps} localMediaStream={localMediaStream ?? undefined} />
             </OptionPage>
             <OptionPage option='old' active={viewOption}>
                 <div>
