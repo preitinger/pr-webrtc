@@ -491,9 +491,7 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
     const columns = Math.ceil(Math.sqrt(n));
     console.log('columns', columns)
     const rows = Math.ceil(n / columns)
-    const connectionsRows: JSX.Element[] = [
-
-    ];
+    const connectionsRows: JSX.Element[] = [];
     const maxWidth = `calc(${100 / columns}vw - 1rem)`
     const maxHeight = `calc(${100 / rows}vh - ${rows * 1.5 + 1}rem)`
     console.log('maxWidth', maxWidth, 'maxHeight', maxHeight)
@@ -505,7 +503,20 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
         for (let column = 0; column < columns; ++column) {
             if (row === 0 && column === 0 && props.localMediaStream != null) {
                 comps.push(
-                    <VideoComp key='$local$' mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
+                    <div className={styles.connectionComp}/*  style={{ maxWidth: props.maxWidth, maxHeight: props.maxHeight }} */>
+                    {<p className={styles.connectionCompParagraph}>Local video</p>}
+                    {
+                        (props.localMediaStream == null || props.localMediaStream.getVideoTracks().length === 0) && <p><i>No local video</i></p>
+                    }
+                    {props.localMediaStream != null &&
+                        <div className={styles.connectionCompItem}>
+                            {/* <div className={styles.fakeVideoComp}>Fake Video Comp</div> */}
+                            <VideoComp mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
+                        </div>
+                    }
+                </div>
+        
+                    // <VideoComp key='$local$' mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
                 )
             } else {
                 if (i >= valList.length) continue;
