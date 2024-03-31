@@ -488,6 +488,9 @@ type ConnectionsProps = rt.Static<typeof ConnectionsProps>
 function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStream }) {
     const valList = Object.values(props.connections)
     const n = (props.localMediaStream != null ? 1 : 0) + valList.length;
+    if (n === 0) return (
+        <p>No active connection!</p>
+    )
     const columns = Math.ceil(Math.sqrt(n));
     console.log('columns', columns)
     const rows = Math.ceil(n / columns)
