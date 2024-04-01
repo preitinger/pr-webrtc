@@ -516,6 +516,7 @@ export class Connection {
         switch (remoteRole) {
             case 'callee':
                 assert(this.withVideo != null);
+                this.preparingCall = true;
                 this.sendRemoteMsg({
                     type: 'prepareCall',
                     videoAccepted: this.withVideo.receive
@@ -652,12 +653,15 @@ export class Connection {
         this.dbg('handleRemoteMsg: ' + JSON.stringify(msg))
         switch (msg.type) {
             case 'sdp':
+                this.remoteAcceptingVideo = msg.videoAccepted;
+                this.preparingCall = false;
                 const description = JSON.parse(msg.jsonSdp) as RTCSessionDescription;
                 this.ignoreOffer = !this.polite() && description.type === 'offer' && (this.makingOffer || this.pc.signalingState !== 'stable')
                 if (this.ignoreOffer) return;
                 await this.pc.setRemoteDescription(description);
                 this.abortController.signal.throwIfAborted();
                 if (description.type === 'offer') {
+                    await this.updateMedia();
                     await this.pc.setLocalDescription();
                     this.abortController.signal.throwIfAborted();
                     assert(this.withVideo != null); // otherwise concept is completely wrong ;-)
@@ -673,7 +677,11 @@ export class Connection {
                 if (!this.ignoreOffer) {
                     const candidate = JSON.parse(msg.jsonCandidate);
                     // console.log('before addIceCandidate: candidate', candidate)
-                    this.pc.addIceCandidate(candidate);
+                    try {
+                        await this.pc.addIceCandidate(candidate);
+                    } catch (reason: any) {
+                        console.error(reason);
+                    }
                 }
                 break;
 
@@ -700,7 +708,7 @@ export class Connection {
     }
 
     private rawHangUp() {
-        console.log('rawHangUp for ', this.remoteUser)
+        // console.log('rawHangUp for ', this.remoteUser)
         this.abortController.signal.throwIfAborted();
         this.abortController.abort();
         if (this.sendingVideo) {
@@ -966,7 +974,10 @@ export class Connection {
                 })
             }
             this.withVideo = wv;
-            this.updateMedia();
+
+            if (!this.preparingCall) {
+                this.updateMedia();
+            }
         } else {
             this.sendRemoteMsg({
                 type: 'hangUp'
@@ -1040,6 +1051,7 @@ export class Connection {
     private resolveNextRemoteMsg: ((msg: RemoteMsg) => void) | null = null;
     private messages: string[] = [];
     private outerSignal: AbortSignal;
+    private preparingCall = false;
 }
 
 export class ConnectionOld {

@@ -223,7 +223,7 @@ export function MultiSelectChatUserListComp(props: MultiSelectChatUserListProps)
 
     return (
         <div>
-            <label>{props.label ?? 'Users:'}</label>
+            <label className={styles.userListLabel}>{props.label ?? 'Users:'}</label>
             <div role='listbox' className={styles.userListOuter}>
                 <ul className={`${styles.userList} ${props.small && styles.userListSmall}`}>
                     {

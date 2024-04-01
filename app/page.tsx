@@ -15,6 +15,7 @@ import timeout from "./_lib/pr-timeout/pr-timeout";
 import useTardyFlag from "./_lib/pr-client-utils/useTardyFlag";
 import ModalDialog from "@/components/ModalDialog";
 import { VideoComp } from "./_lib/video/video-client";
+import { ChatEvent } from "./_lib/chat/chat-common";
 
 const eventBusKey = 'pr-webrtc';
 const chatId = 'pr-webrtc';
@@ -351,11 +352,11 @@ function VideoConfigComp({ initialSendVideo, initialReceiveVideo, initialFitToDi
                 {generateFieldSet('send')}
                 {generateFieldSet('receive')}
             </fieldset>
-            <div>
+            {/* <div>
                 <input id='fitToDisplay' type='checkbox' checked={fitToDisplay} onChange={onChange('fitToDisplay')} />
                 <label htmlFor='fitToDisplay'>Fit all videos to display
                 </label>
-            </div>
+            </div> */}
         </div>
     )
 }
@@ -497,7 +498,6 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
     const connectionsRows: JSX.Element[] = [];
     const maxWidth = `calc(${100 / columns}vw - 1rem)`
     const maxHeight = `calc(${100 / rows}vh - ${rows * 1.5 + 1}rem)`
-    console.log('maxWidth', maxWidth, 'maxHeight', maxHeight)
 
     let i = 0;
 
@@ -506,19 +506,19 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
         for (let column = 0; column < columns; ++column) {
             if (row === 0 && column === 0 && props.localMediaStream != null) {
                 comps.push(
-                    <div className={styles.connectionComp}/*  style={{ maxWidth: props.maxWidth, maxHeight: props.maxHeight }} */>
-                    {<p className={styles.connectionCompParagraph}>Local video</p>}
-                    {
-                        (props.localMediaStream == null || props.localMediaStream.getVideoTracks().length === 0) && <p><i>No local video</i></p>
-                    }
-                    {props.localMediaStream != null &&
-                        <div className={styles.connectionCompItem}>
-                            {/* <div className={styles.fakeVideoComp}>Fake Video Comp</div> */}
-                            <VideoComp mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
-                        </div>
-                    }
-                </div>
-        
+                    <div key='$local$' className={styles.connectionComp}/*  style={{ maxWidth: props.maxWidth, maxHeight: props.maxHeight }} */>
+                        {<p className={styles.connectionCompParagraph}>Local video</p>}
+                        {
+                            (props.localMediaStream == null || props.localMediaStream.getVideoTracks().length === 0) && <p><i>No local video</i></p>
+                        }
+                        {props.localMediaStream != null &&
+                            <div className={styles.connectionCompItem}>
+                                {/* <div className={styles.fakeVideoComp}>Fake Video Comp</div> */}
+                                <VideoComp mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
+                            </div>
+                        }
+                    </div>
+
                     // <VideoComp key='$local$' mediaStream={props.localMediaStream} width={maxWidth} height={maxHeight} />
                 )
             } else {
@@ -527,11 +527,11 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
                 comps.push(
                     <ConnectionComp key={c.remoteUser} {...c} maxWidth={maxWidth} maxHeight={maxHeight} />
                 )
-    
+
             }
         }
         connectionsRows.push(
-            <div className={styles.connectionsRow}>
+            <div key={`row.${row}`} className={styles.connectionsRow}>
                 {comps}
             </div>
         )
@@ -618,13 +618,52 @@ function menuItemClassName1(option: ViewOption) {
 interface TopMenuItemProps {
     option: ViewOption
     activeOption: ViewOption;
+    marked: boolean;
+    imgUrl: string | null;
     onClick: (option: ViewOption) => () => void;
 }
 function TopMenuItem(props: PropsWithChildren<TopMenuItemProps>) {
+    const ref = useRef<HTMLButtonElement>(null);
+    const [markedImgUrl, setMarkedImgUrl] = useState<string | null>(props.imgUrl);
+
+    useEffect(() => {
+        const abortController = new FixedAbortController();
+        const signal = abortController.signal;
+
+        async function f() {
+            if (props.imgUrl == null) return;
+
+            try {
+
+                const resp = await fetch(props.imgUrl, {
+                    signal: signal
+                })
+                const blob = await resp.blob()
+                const canvas = new OffscreenCanvas(32, 32);
+                const c = canvas.getContext('2d');
+                if (c == null) return;
+                c.drawImage(await createImageBitmap(blob), 0, 0);
+                c.fillStyle = 'red';
+                c.arc(4, 4, 4, 0, Math.PI * 2)
+                c.fill();
+                setMarkedImgUrl(URL.createObjectURL(await canvas.convertToBlob()));
+            } catch (reason: any) {
+                if (reason.name !== 'AbortError') {
+                    console.error(reason);
+                }
+            }
+        }
+
+        f();
+        return () => {
+            abortController.abort();
+        }
+    }, [props.imgUrl])
     return (
-        <div className={`${styles.topMenuButtonWrapper} ${props.option === props.activeOption ? styles.activeMenu : ''}`}>
-            <button className={menuItemClassName(props.option, props.activeOption)}
-                onClick={props.onClick(props.option)}>
+        <div className={`${styles.topMenuButtonWrapper} ${/* props.option === props.activeOption ? styles.activeMenu : '' */''}`}>
+            <button ref={ref} style={props.imgUrl == null ? {} : { backgroundImage: `url("${props.marked ? markedImgUrl : props.imgUrl}")` }}
+                className={menuItemClassName(props.option, props.activeOption)}
+                onClick={props.onClick(props.option)} disabled={props.option === props.activeOption}>
                 {props.children}
             </button>
         </div>
@@ -667,7 +706,7 @@ function initialConnectionsProps(): ConnectionsProps {
     }
 }
 
-type ViewOption = 'old' | 'users' | 'config' | 'chat' | 'video';
+type ViewOption = 'all' | 'users' | 'config' | 'chat' | 'video';
 
 export default function Page() {
     const [startPageProps, setStartPageProps] = useState<StartPageProps | null>(null);
@@ -702,7 +741,11 @@ export default function Page() {
     const [connectionsProps, setConnectionsProps] = useState<ConnectionsProps>(initialConnectionsProps())
     const [receivedCallProps, setReceivedCallProps] = useState<ReceivedCallProps | null>(null);
     const [hangUpProps, setHangUpProps] = useState<HangUpProps | null>(null);
-    const [viewOption, setViewOption] = useState<ViewOption>('old');
+    const [viewOption, setViewOption] = useState<ViewOption>('all');
+    const [markedOptions, setMarkedOptions] = useState<{ [key: string]: boolean }>({})
+    const testButtonRef = useRef<HTMLButtonElement>(null);
+    const testCanvasRef = useRef<HTMLCanvasElement>(null)
+    const [errorsAndHints, setErrorsAndHints] = useState<ChatEvent[]>([])
 
     useEffect(() => {
         // console.log('starting main effect with routeActivity()')
@@ -738,7 +781,7 @@ export default function Page() {
                     throwIfAborted();
                     const e: any = await subscr.nextEvent();
                     throwIfAborted();
-                    console.log('handleEvents got', ('type' in e ? e.type : ''), e);
+                    // console.log('handleEvents got', ('type' in e ? e.type : ''), e);
                     if (MyEvents.guard(e)) {
                         switch (e.type) {
                             case 'StartPage':
@@ -783,9 +826,20 @@ export default function Page() {
                                 break;
                             case 'ChatAddErrorLine':
                                 chatAddErrorLine(e.error);
+                                setErrorsAndHints(d => ([...d, {
+                                    type: 'Error',
+                                    error: e.error
+                                }]))
+                                setTopMenuItemMarked('chat', true);
                                 break;
                             case 'ChatAddHintLine':
                                 chatAddErrorLine(e.hint);
+                                setErrorsAndHints(d => ([...d,
+                                {
+                                    type: 'Hint',
+                                    hint: e.hint
+                                }]))
+                                setTopMenuItemMarked('chat', true);
                                 break;
                             case 'FetchingSetInterrupted':
                                 accumulatedFetching.setInterrupted(e.interrupted);
@@ -810,6 +864,7 @@ export default function Page() {
                                 break;
                             case 'LocalMediaStream':
                                 setLocalMediaStream(e.stream as MediaStream | null);
+                                setTopMenuItemMarked('video', true);
                                 break;
                             case 'SetConnectionComp':
                                 setConnectionsProps(d => {
@@ -828,6 +883,7 @@ export default function Page() {
                                     }
                                     return ConnectionsProps.check(newConnectionsProps);
                                 })
+                                setTopMenuItemMarked('video', true);
                                 break;
                             case 'RemoteMediaStream':
                                 setConnectionsProps(d => {
@@ -846,9 +902,14 @@ export default function Page() {
                                     return ConnectionsProps.check(res)
 
                                 })
+                                setTopMenuItemMarked('video', true);
+
                                 break;
                             case 'ReceivedCallDlg':
                                 setReceivedCallProps(e.props);
+                                if (e.props != null) {
+                                    setTopMenuItemMarked('users', true);
+                                }
                                 break;
                             case 'HangUpDlg':
                                 setHangUpProps(e.props);
@@ -932,18 +993,30 @@ export default function Page() {
         }
     </>
 
+    function setTopMenuItemMarked(option: ViewOption, marked: boolean) {
+        setMarkedOptions(d => ({
+            ...d,
+            [option]: marked
+        }))
+    }
+
     const onTopMenuItemClick = (option: ViewOption) => () => {
         setViewOption(option);
+        setTopMenuItemMarked(option, false);
     }
 
     return (
         <>
             <div className={styles.topMenu}>
-                <TopMenuItem option='old' activeOption={viewOption} onClick={onTopMenuItemClick}>Old view</TopMenuItem>
-                {(['users', 'config', 'chat', 'video'] as ViewOption[]).map(option => (
-                    <TopMenuItem key={option} option={option} activeOption={viewOption} onClick={onTopMenuItemClick} />
+                {/* <TopMenuItem imgUrl={null} marked={false} option='all' activeOption={viewOption} onClick={onTopMenuItemClick}>All</TopMenuItem> */}
+                {([['all', '/icons/app_14741112.png'],
+                ['users', '/icons/customer_6012823.png'],
+                ['config', '/icons/configuration_102642.png'],
+                ['chat', '/icons/speech-bubble_1078011.png'],
+                ['video', '/icons/film_1146152.png']] as [ViewOption, string][]).map(option => (
+                    <TopMenuItem key={option[0]} option={option[0]} activeOption={viewOption} imgUrl={option[1]} marked={markedOptions[option[0]]} onClick={onTopMenuItemClick} />
                 ))}
-                {/* <button className={menuItemClassName('old')} onClick={() => { setViewOption('old') }}>Old view</button> */}
+                {/* <button className={menuItemClassName('all'')} onClick={() => { setViewOption('all'') }}>Old view</button> */}
                 {/* <button className={menuItemClassName('config')} onClick={() => {
                     setViewOption('config')
                 }} />
@@ -953,7 +1026,13 @@ export default function Page() {
                 <button className={menuItemClassName('video')} onClick={() => {
                     setViewOption('video')
                 }} /> */}
-            </div>
+                <div className={styles.gap} />
+                {regularPageProps != null &&
+                    <button className={styles.logout} onClick={() => fireEvent<LogoutClicked>({
+                        type: 'LogoutClicked',
+                    })
+                    } />
+                }            </div>
             <OptionPage option={'users'} active={viewOption} notLoggedIn={regularPageProps == null}>
                 <MultiSelectChatUserListComp
                     userListState={chat.userList}
@@ -962,11 +1041,44 @@ export default function Page() {
                         throw new Error('nyi');
                     }}
                     onClick={chatOnUserClick} />
+                <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
+                    fireEvent<CallClicked>({
+                        type: 'CallClicked',
+                        callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
+                    })
+
+                } />
+                <button className={styles.reject} onClick={() => {
+                    fireEvent<HangUpClicked>({
+                        type: 'HangUpClicked',
+                        remoteUser: null
+                    });
+                }} />
+                {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
+                {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+                {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
+                <ChatPanelComp /* ref={chatLinesRef} */ events={errorsAndHints} linesBeingSent={chat.linesBeingSent} /* lines={chatLines} */ /* onScroll={onScroll} */ small={callActive} />
             </OptionPage>
             <OptionPage option={'config'} active={viewOption} notLoggedIn={regularPageProps == null}>
                 {regularPageProps != null &&
-                    <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo}
-                        initialFitToDisplay={regularPageProps.fitToDisplay} />
+                    <>
+                        <button onClick={() => fireEvent<VideoDataSettingsClicked>({
+                            type: 'VideoDataSettingsClicked',
+                        })
+                        }>Video settings for individual connections ...</button>
+                        {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+
+                        <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo}
+                            initialFitToDisplay={regularPageProps.fitToDisplay} />
+                        {
+                            cameraTestButtonText != null &&
+                            <button onClick={() => fireEvent<CameraTestClicked>({
+                                type: 'CameraTestClicked',
+                            })
+                            }>{cameraTestButtonText}</button>
+                        }
+
+                    </>
                 }
             </OptionPage>
             <OptionPage option='chat' active={viewOption} notLoggedIn={regularPageProps == null}>
@@ -975,9 +1087,47 @@ export default function Page() {
                 </div>
             </OptionPage>
             <OptionPage option='video' active={viewOption} notLoggedIn={regularPageProps == null}>
+                {/* <button onClick={async () => {
+                    if (testButtonRef.current != null) {
+                        const canvas = new OffscreenCanvas(32, 32);
+                        const c = canvas.getContext("2d");
+                        if (c == null) return;
+                        const resp = await fetch('/icons/film_1146152.png');
+                        const bmp = await createImageBitmap(await resp.blob())
+                        c.drawImage(bmp, 0, 0);
+                        c.fillStyle = 'red';
+                        c.arc(5, 5, 4, 0, Math.PI * 2)
+                        c.fill();
+                        const newBlob = await canvas.convertToBlob();
+                        const imgUrl = URL.createObjectURL(newBlob);
+                        if (testCanvasRef.current != null) {
+                            const testC = testCanvasRef.current.getContext("2d");
+                            testC?.drawImage(canvas.transferToImageBitmap(), 0, 0);
+
+                        }
+                        console.log('imgUrl', imgUrl);
+                        testButtonRef.current.style.backgroundImage = `url('${imgUrl}')`
+                        testButtonRef.current.style.backgroundPosition = 'center';
+                        testButtonRef.current.style.backgroundRepeat = 'no-repeat';
+                        testButtonRef.current.innerText = ''
+                        console.log('set new background image for testButton')
+                    }
+                }}>Test</button>
+                <button style={{
+                    background: "url('/accept-call-64x64.png')"
+                }} ref={testButtonRef}>This button will be decorated</button>
+                <canvas ref={testCanvasRef} />
+                <input type='text' id='markOption' />
+                <button onClick={() => {
+                    const el = document.getElementById('markOption') as HTMLInputElement;
+                    setMarkedOptions(d => ({
+                        ...d,
+                        [el.value]: !(d[el.value] ?? false)
+                    }))
+                }}>Toggle mark</button> */}
                 <ConnectionsComp {...connectionsProps} localMediaStream={localMediaStream ?? undefined} />
             </OptionPage>
-            <OptionPage option='old' active={viewOption}>
+            <OptionPage option='all' active={viewOption}>
                 <div>
 
                     <header className={styles.header}>
@@ -1006,10 +1156,10 @@ regularPageProps != null &&
                             {
                                 regularPageProps != null && fetchError == null &&
                                 <div className={styles.flexRow}>
-                                    <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
+                                    {/* <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
                                         type: 'LogoutClicked',
                                     })
-                                    }>Logout</button>
+                                    }>Logout</button> */}
                                     <button onClick={() => fireEvent<WaitForPushClicked>({
                                         type: 'WaitForPushClicked',
                                     })

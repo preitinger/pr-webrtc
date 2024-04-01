@@ -685,7 +685,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                             break;
 
                         case 'RegularFunctionsShutdown':
-                            console.warn('RegularFunctionsShutdown in localVideo')
+                            // console.warn('RegularFunctionsShutdown in localVideo')
                             shutdown = true;
                             break;
                     }
@@ -959,7 +959,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             let maxTries = 5;
             do {
                 cons = Object.values(connections);
-                console.log('shutdownAndJoin for ', cons.length, ' connections ...');
+                // console.log('shutdownAndJoin for ', cons.length, ' connections ...');
                 await Promise.all(cons.map(con => con.shutdownAndJoin()))
             } while (cons.length > 0 && maxTries-- > 0)
 
@@ -1035,12 +1035,12 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             msgClient.addToSend(remoteUser, [JSON.stringify(msg)]);
         }
         const req = msgClient.createReq();
-        console.log('req created by msgClient', req);
+        // console.log('req created by msgClient', req);
         const resp = await accumulatedFetching.push<AuthenticatedVideoReq<MsgReq>, ApiResp<MsgResp>>(authenticate(req),
             outerSignal)
         switch (resp.type) {
             case 'success':
-                console.log('rcv', resp.rcv);
+                // console.log('rcv', resp.rcv);
                 break;
             case 'error':
                 console.error(resp);

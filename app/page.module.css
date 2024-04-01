@@ -290,21 +290,30 @@
     justify-content: center;
     align-items: center;
 }
-.activeMenu {
-    background-color:rgb(125,230,0);
+.button-all:hover, .button-users:hover, .button-config:hover, .button-chat:hover, .button-video:hover, .logout:hover {
+    background-color:blanchedalmond;
 }
-.button-users, .button-config, .button-chat, .button-video {
+.button-all, .button-users, .button-config, .button-chat, .button-video, .logout {
     background-color: transparent;
-    width: 32px;
-    height: 32px;
+    background-position: center;
+    background-repeat: no-repeat;
+    width: 40px;
+    height: 40px;
     border-radius: 0;
     border: none;
     margin: 3px;
 }
-.button-old {
+/* .button-all {
     margin: 3px;
     border-radius: 0;
     border: none;
+    width: 40px;
+    height: 40px;
+    text-align: center;
+    padding: 0;
+} */
+.button-all {
+    background-image: url('/icons/app_14741112.png');
 }
 .button-users {
     background-image: url('/icons/customer_6012823.png');
@@ -318,4 +327,13 @@
 }
 .button-video {
     background-image: url('/icons/film_1146152.png')
+}
+.activeMenu {
+    background-color:rgb(125,230,0) !important;
+}
+.gap {
+    flex-grow: 1000;
+}
+.logout {
+    background-image: url('/icons/power_12472615.png');
 }
