@@ -463,7 +463,7 @@ function ConnectionComp(props: ConnectionProps & { maxWidth: string, maxHeight: 
         <div className={styles.connectionComp}/*  style={{ maxWidth: props.maxWidth, maxHeight: props.maxHeight }} */>
             {props.msg != null ? <p className={styles.connectionCompParagraph}>{props.msg}</p> : <p className={styles.connectionCompParagraph}>{props.remoteUser}</p>}
             {
-                (stream == null || stream.getVideoTracks().length === 0) && <p><i>No video from {props.remoteUser}</i></p>
+                (props.msg == null && (stream == null || stream.getVideoTracks().length === 0)) && <p><i>No video from {props.remoteUser}</i></p>
             }
             {props.stream != null &&
                 <div className={styles.connectionCompItem}>
@@ -493,7 +493,6 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
         <p>No active connection!</p>
     )
     const columns = Math.ceil(Math.sqrt(n));
-    console.log('columns', columns)
     const rows = Math.ceil(n / columns)
     const connectionsRows: JSX.Element[] = [];
     const maxWidth = `calc(${100 / columns}vw - 1rem)`
@@ -539,6 +538,7 @@ function ConnectionsComp(props: ConnectionsProps & { localMediaStream?: MediaStr
 
     return (
         <div className={styles.connectionsComp}>
+            {props.localMediaStream == null && <p>Not sending or testing video.</p>}
             {connectionsRows}
             {/* {
                 valList.map(c => (
@@ -767,6 +767,9 @@ export default function Page() {
 
 
         async function handleEvents() {
+            function mark(option: ViewOption) {
+                setTopMenuItemMarked(option, true);
+            }
             const subscr = eventBus.subscribe();
             try {
                 // TODO add ReceivedCallDlg and ReceivedCallComp and so on
@@ -830,7 +833,7 @@ export default function Page() {
                                     type: 'Error',
                                     error: e.error
                                 }]))
-                                setTopMenuItemMarked('chat', true);
+                                mark('chat');
                                 break;
                             case 'ChatAddHintLine':
                                 chatAddErrorLine(e.hint);
@@ -839,7 +842,7 @@ export default function Page() {
                                     type: 'Hint',
                                     hint: e.hint
                                 }]))
-                                setTopMenuItemMarked('chat', true);
+                                mark('chat');
                                 break;
                             case 'FetchingSetInterrupted':
                                 accumulatedFetching.setInterrupted(e.interrupted);
@@ -864,7 +867,7 @@ export default function Page() {
                                 break;
                             case 'LocalMediaStream':
                                 setLocalMediaStream(e.stream as MediaStream | null);
-                                setTopMenuItemMarked('video', true);
+                                mark('video');
                                 break;
                             case 'SetConnectionComp':
                                 setConnectionsProps(d => {
@@ -883,7 +886,7 @@ export default function Page() {
                                     }
                                     return ConnectionsProps.check(newConnectionsProps);
                                 })
-                                setTopMenuItemMarked('video', true);
+                                mark('video');
                                 break;
                             case 'RemoteMediaStream':
                                 setConnectionsProps(d => {
@@ -902,13 +905,13 @@ export default function Page() {
                                     return ConnectionsProps.check(res)
 
                                 })
-                                setTopMenuItemMarked('video', true);
+                                mark('video');
 
                                 break;
                             case 'ReceivedCallDlg':
                                 setReceivedCallProps(e.props);
                                 if (e.props != null) {
-                                    setTopMenuItemMarked('users', true);
+                                    mark('users');
                                 }
                                 break;
                             case 'HangUpDlg':
@@ -969,6 +972,12 @@ export default function Page() {
             }
         }
     }, [chatAddErrorLine, chatOnStart, chatOnStop, setBusy])
+
+    useEffect(() => {
+        if (markedOptions[viewOption]) {
+            setTopMenuItemMarked(viewOption, false);
+        }
+    }, [viewOption, markedOptions])
 
     const onChatKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
         if (e.key === 'Enter') {

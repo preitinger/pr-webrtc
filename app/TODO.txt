@@ -1,2 +1,0 @@
-Testen was passiert, wenn Video-Track hinzugefügt oder entfernt wird, während die negotiation noch läuft.
-Laut MDN Doc wird das Event negotiationneeded nur im Zustand stable ausgelöst

@@ -620,7 +620,7 @@ export async function executeAuthenticatedVideoReq(req: AuthenticatedVideoReq<{ 
     }
     if (req.req.type in actions) {
         const action = actions[req.req.type];
-        console.log('found action for ', req.req.type, action);
+        // console.log('found action for ', req.req.type, action);
         return action(req.ownUser, req.req);
     }
     console.log('alternative path');

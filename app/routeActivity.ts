@@ -756,72 +756,72 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
     //     }
     // }
 
-    async function setupPushNotifications(signal: AbortSignal): Promise<PushSubscription | null> {
-        fireEvent<SetupPushDlg>({
-            type: 'SetupPushDlg',
-            props: { error: null }
-        })
-        try {
-            const e = await waitForGuard({ bus: eventBus }, rt.Union(OkClicked, CancelClicked), signal);
-            switch (e.type) {
-                case 'OkClicked': {
-                    let tryAgain = true;
+    // async function setupPushNotifications(signal: AbortSignal): Promise<PushSubscription | null> {
+    //     fireEvent<SetupPushDlg>({
+    //         type: 'SetupPushDlg',
+    //         props: { error: null }
+    //     })
+    //     try {
+    //         const e = await waitForGuard({ bus: eventBus }, rt.Union(OkClicked, CancelClicked), signal);
+    //         switch (e.type) {
+    //             case 'OkClicked': {
+    //                 let tryAgain = true;
 
-                    do {
-                        const pushManager = (await navigator.serviceWorker.ready).pushManager;
-                        let subscription = await pushManager.getSubscription()
-                        // console.log('subscription from pushManager.getSubscription', subscription)
-                        if (subscription == null) {
-                            try {
-                                subscription = await pushManager.subscribe(subscriptionOptions)
-                            } catch (reason: any) {
-                                let error: string;
-                                if ('name' in reason) {
-                                    if (reason.name === 'NotAllowedError' || reason.name === 'NotFoundError' || reason.name === 'NotSupportedError') {
-                                        error = reason.message;
-                                    } else {
-                                        console.error(reason);
-                                        error = 'Unexpected error';
-                                    }
-                                } else {
-                                    console.error(reason);
-                                    error = 'Unexpected error';
-                                }
-                                tryAgain = await pushError(error, signal)
-                                continue;
-                            }
-                        }
+    //                 do {
+    //                     const pushManager = (await navigator.serviceWorker.ready).pushManager;
+    //                     let subscription = await pushManager.getSubscription()
+    //                     // console.log('subscription from pushManager.getSubscription', subscription)
+    //                     if (subscription == null) {
+    //                         try {
+    //                             subscription = await pushManager.subscribe(subscriptionOptions)
+    //                         } catch (reason: any) {
+    //                             let error: string;
+    //                             if ('name' in reason) {
+    //                                 if (reason.name === 'NotAllowedError' || reason.name === 'NotFoundError' || reason.name === 'NotSupportedError') {
+    //                                     error = reason.message;
+    //                                 } else {
+    //                                     console.error(reason);
+    //                                     error = 'Unexpected error';
+    //                                 }
+    //                             } else {
+    //                                 console.error(reason);
+    //                                 error = 'Unexpected error';
+    //                             }
+    //                             tryAgain = await pushError(error, signal)
+    //                             continue;
+    //                         }
+    //                     }
 
 
-                        const resp = await authenticatedVideoReq<PushSubscribeReq, PushSubscribeResp>({
-                            type: 'pushSubscribe',
-                            subscription: JSON.stringify(subscription),
-                        }, signal)
+    //                     const resp = await authenticatedVideoReq<PushSubscribeReq, PushSubscribeResp>({
+    //                         type: 'pushSubscribe',
+    //                         subscription: JSON.stringify(subscription),
+    //                     }, signal)
 
-                        switch (resp.type) {
-                            case 'success':
-                                return subscription;
-                            case 'error':
-                                subscription.unsubscribe()
-                                tryAgain = await pushError(resp.error, signal);
-                                break;
-                        }
+    //                     switch (resp.type) {
+    //                         case 'success':
+    //                             return subscription;
+    //                         case 'error':
+    //                             subscription.unsubscribe()
+    //                             tryAgain = await pushError(resp.error, signal);
+    //                             break;
+    //                     }
 
-                    } while (tryAgain);
-                    return null;
-                }
-                case 'CancelClicked': {
-                    return null;
-                }
-            }
-        } finally {
-            signal.throwIfAborted();
-            fireEvent<SetupPushDlg>({
-                type: 'SetupPushDlg',
-                props: null
-            })
-        }
-    }
+    //                 } while (tryAgain);
+    //                 return null;
+    //             }
+    //             case 'CancelClicked': {
+    //                 return null;
+    //             }
+    //         }
+    //     } finally {
+    //         signal.throwIfAborted();
+    //         fireEvent<SetupPushDlg>({
+    //             type: 'SetupPushDlg',
+    //             props: null
+    //         })
+    //     }
+    // }
 
     /**
      * return true if user decided to try again

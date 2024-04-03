@@ -5,7 +5,7 @@ import chainedAbortController from "./_lib/pr-client-utils/chainedAbortControlle
 import { MsgClient } from "./_lib/pr-msg-client/pr-msg-client";
 import { MsgReq, MsgResp } from "./_lib/pr-msg-common/pr-msg-common";
 import { AuthenticatedVideoReq, PushNotifyReq, PushNotifyResp } from "./_lib/video/video-common";
-import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp } from "./busEvents";
+import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp, PushNotificationsShutdown } from "./busEvents";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
 import { ApiResp } from "./_lib/user-management-client/user-management-common/apiRoutesCommon";
 import { RemoteMsg } from "./busEvents";
@@ -16,6 +16,9 @@ import { getEventBus } from "./useEventBus";
 import timeout from "./_lib/pr-timeout/pr-timeout";
 import { time } from "console";
 import * as localStorageAccess from "./localStorageAccess";
+import { myAddEventListener } from "./_lib/pr-client-utils/eventListeners";
+import { callEachReverse, forEachReverse } from "./_lib/pr-utils";
+import { SetupPushNotifications } from "./_lib/video/video-client-old";
 
 /**
  * @deprecated
@@ -91,7 +94,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
             return new Promise<void>(resolveBehavior => {
 
-
+                const toCallOnRelease: (() => void)[] = [];
 
 
                 /**
@@ -219,9 +222,10 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         case 'fetchingBeforeInterrupt':
                         // no break
                         case 'interrupted':
-                            abortAndRelease();
+                            abortController.abort();
                             resolveBehavior();
                             st = 'final';
+                            // release() will be done in finally block
                             break;
                     }
                 }
@@ -312,20 +316,14 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
                 function createAbortController() {
                     const abortController = chainedAbortController(outerSignal)
-                    abortController[0].signal.addEventListener('abort', (ev: Event) => {
-                        // console.error('no error: gonna clearMyTimeout on abort event');
-                        clearMyTimeout();
-                        abortController[1]();
-                    }, {
-                        signal: abortController[0].signal
-                    })
-                    return abortController;
+                    toCallOnRelease.push(abortController[1]);
+                    return abortController[0];
                 }
 
-                function abortAndRelease() {
-                    // console.warn('abortAndRelease of transportMessage');
-                    abortController.abort();
-                    releaseAbortController();
+                function release() {
+                    // console.log('regularFunctions/manageCalls/transportMessages/release()');
+                    clearMyTimeout();
+                    callEachReverse(toCallOnRelease);
                 }
 
                 async function processEventsUntilAborted() {
@@ -362,9 +360,12 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                 // init node
                 //
 
-                const [abortController, releaseAbortController] = createAbortController();
+                const abortController = createAbortController();
                 receiveTimerEnter();
-                processEventsUntilAborted().catch(onError);
+                processEventsUntilAborted().catch(onError).finally(() => {
+                    release();
+                    // console.log('finally for processEventsUntilAborted in regularFunctions/manageCalls/transportMessages');
+                });
 
 
             })
@@ -582,7 +583,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             const subscr = eventBus.subscribe();
 
             try {
-                let currentStream: MediaStream | null = null;
+                let currentStream1: MediaStream | null = null;
 
                 while (!shutdown) {
                     const e = await waitForGuard({ subscr: subscr }, rt.Union(VideoSenderCountUpdate, CameraTestClicked, RegularFunctionsShutdown), signal);
@@ -594,7 +595,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                 if (senderCount === 0) {
                                     fireEvent<LocalMediaStream>({
                                         type: 'LocalMediaStream',
-                                        stream: (currentStream = e.stream as MediaStream)
+                                        stream: (currentStream1 = e.stream as MediaStream)
                                     })
                                     fireEvent<SetCameraTestButton>({
                                         type: 'SetCameraTestButton',
@@ -612,14 +613,13 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                             } else {
                                 --senderCount;
                                 if (senderCount === 0) {
-                                    fireEvent<LocalMediaStream>({
-                                        type: 'LocalMediaStream',
-                                        stream: null
-                                    })
-                                    currentStream?.getTracks().forEach(track => {
+                                    currentStream1?.getTracks().forEach(track => {
                                         track.stop();
                                     })
-                                    currentStream = null;
+                                    fireEvent<LocalMediaStream>({
+                                        type: 'LocalMediaStream',
+                                        stream: (currentStream1 = null)
+                                    })
                                     fireEvent<SetCameraTestButton>({
                                         type: 'SetCameraTestButton',
                                         label: 'Camera Test'
@@ -632,6 +632,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         case 'CameraTestClicked':
                             if (senderCount === 0) {
                                 if (testStream == null) {
+                                    if (currentStream1 != null) throw new Error('currentStream not null')
                                     try {
                                         testStream = await navigator.mediaDevices.getUserMedia({
                                             video: true,
@@ -691,15 +692,19 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                     }
                 }
 
-                currentStream?.getTracks().forEach(track => {
+                if (currentStream1 != null || testStream != null) {
+                    fireEvent<LocalMediaStream>({
+                        type: 'LocalMediaStream',
+                        stream: null
+                    })
+                }
+
+                currentStream1?.getTracks().forEach(track => {
                     track.stop();
                 })
+                currentStream1 = null;
                 senderCount = 0;
                 evtlStopTestStream();
-                fireEvent<LocalMediaStream>({
-                    type: 'LocalMediaStream',
-                    stream: null
-                })
                 fireEvent<SetCameraTestButton>({
                     type: 'SetCameraTestButton',
                     label: null
@@ -885,6 +890,15 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         });
                     }
                     connections[remoteUser] = new Connection(sentVideoUpdated, closed, send, eventBus, user, remoteUser, 'callee', signal, wv)
+                    fireEvent<SetConnectionComp>({
+                        type: 'SetConnectionComp',
+                        remoteUser: remoteUser,
+                        props: {
+                            remoteUser: remoteUser,
+                            msg: `Calling ${remoteUser}`,
+                            stream: null
+                        }
+                    });
                 }
             }
         }
@@ -969,8 +983,129 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         return consAtShutdown;
     }
 
-    async function managePushNotifications(signal: AbortSignal) {
-        nyi();
+    async function managePushNotifications(signal: AbortSignal): Promise<void> {
+        let regularFunctionsShutdown = false;
+
+        const promises: Promise<void>[] = [];
+
+        promises.push(async function () {
+            const subscr = eventBus.subscribe();
+            try {
+
+                const MyEvent = rt.Union(WaitForPushClicked, RegularFunctionsShutdown);
+
+                while (!regularFunctionsShutdown) {
+                    const e = await waitForGuard({ subscr: subscr }, MyEvent, signal);
+                    switch (e.type) {
+                        case 'WaitForPushClicked': {
+                            let pushNotificationsShutdown = false;
+                            const doPushNotificationsShutdown = () => {
+                                pushNotificationsShutdown = true;
+                                fireEvent<PushNotificationsShutdown>({
+                                    type: 'PushNotificationsShutdown',
+                                });
+                            }
+                            await Promise.all([
+                                async function () {
+                                    function waitForMsgFromServiceWorker(signal: AbortSignal): Promise<any | null> {
+                                        // Requirements:
+                                        // * throws AbortError on signal
+                                        // * sets up an event listener for 'message' and return the message if one is received
+                                        // * returns null if PushNotificationsShutdown or RegularFunctionsShutdown is published by the eventBus
+
+                                        // Best solution:
+                                        // create an own AbortController that is used for the message event listener
+                                        // call the AbortController.abort() in any of the cases that make waitForMsgFromServiceWorker stop
+
+                                        const tidyUpFuncs: (() => void)[] = [];
+                                        const subscr = eventBus.subscribe();
+                                        return new Promise<string | null>((res, rej) => {
+                                            const [abortController, releaseAbortController] = chainedAbortController(signal);
+                                            async function handleEventBus() {
+                                                const MyEvent = rt.Union(RegularFunctionsShutdown, PushNotificationsShutdown);
+                                                while (true) {
+                                                    signal.throwIfAborted();
+                                                    const e = await waitForGuard({ subscr: subscr }, MyEvent, abortController.signal);
+                                                    res(null);
+                                                    abortController.abort();
+                                                }
+                                            }
+                                            tidyUpFuncs.push(releaseAbortController);
+                                            tidyUpFuncs.push(myAddEventListener<MessageEvent<any>>(navigator.serviceWorker, 'message', (e) => {
+                                                res(e.data);
+                                                abortController.abort();
+                                            }, {
+                                                signal: abortController.signal
+                                            }))
+
+                                        }).finally(() => {
+                                            callEachReverse(tidyUpFuncs);
+                                            subscr.unsubscribe();
+                                        })
+                                    }
+                                    const msg = waitForMsgFromServiceWorker(signal);
+                                    if (msg != null) {
+                                        doPushNotificationsShutdown();
+                                    }
+                                }(),
+                                async function () {
+                                    function setupPushNotifications(signal: AbortSignal):Promise<PushSubscription | null> {
+
+                                        nyi();
+                                        throw new Error('nyi');
+                                    }
+                                    fireEvent<CallsInterrupt>({
+                                        type: 'CallsInterrupt',
+                                    });
+                                    const e = await waitForGuard({ bus: eventBus }, rt.Union(CallsInterruptResult, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                    switch (e.type) {
+                                        case 'CallsInterruptResult':
+                                            if (!e.success) {
+                                                fireEvent<ModalDlg>({
+                                                    type: 'ModalDlg',
+                                                    msg: 'Please hang up your calls, first!'
+                                                });
+                                                await waitForGuard({bus: eventBus}, OkClicked, signal);
+                                                doPushNotificationsShutdown();
+                                            } else {
+                                                const pushSubscription = await setupPushNotifications(signal);
+
+                                            }
+                                    }
+                                    nyi();
+                                }()
+                            ])
+                            break;
+                        }
+
+                        case 'RegularFunctionsShutdown':
+                            return;
+                    }
+                }
+
+            } finally {
+                subscr.unsubscribe();
+            }
+
+        }())
+
+        promises.push(async function () {
+            const subscr = eventBus.subscribe();
+            try {
+                while (!regularFunctionsShutdown) {
+                    const e = await waitForGuard({ subscr: subscr }, RegularFunctionsShutdown, signal);
+                    switch (e.type) {
+                        case 'RegularFunctionsShutdown':
+                            regularFunctionsShutdown = true;
+                            break;
+                    }
+                }
+            } finally {
+                subscr.unsubscribe();
+            }
+        }())
+
+        await Promise.all(promises);
     }
 
 
@@ -1010,10 +1145,6 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             req: req
         }
     }
-
-    let regularFunctionsShutdown = false;
-    let pushNotificationsShutdown = false;
-    let handlingFetchError = false;
 
     // fork
     const manageLogoutAndAuthFailedProm = manageLogoutAndAuthFailed(outerSignal);

@@ -1,6 +1,7 @@
 import { Static, Union } from "runtypes";
 import FixedAbortController from "./pr-client-utils/FixedAbortController";
 import { RuntypeBase } from "runtypes/lib/runtype";
+import { myAddEventListener } from "./pr-client-utils/eventListeners";
 
 export type ClosedException = {
     type: 'closed'
@@ -53,11 +54,11 @@ export class Subscription<Event> {
     nextEvent(signal?: AbortSignal): Promise<Event> {
         let result: Promise<Event>;
         type Listener = () => void;
-        const addedAbortListeners: Listener[] = [];
+        // const addedAbortListeners: Listener[] = [];
+        const listenerRemovers: (() => void)[] = [];
         function addAbortListener(l: Listener) {
-            signal?.addEventListener('abort', l, {
-                signal: signal
-            });
+            if (signal == null) return;
+            listenerRemovers.push(myAddEventListener(signal, 'abort', l));
             ++globalTestCount;
             // console.log('globalTestCount nach add', globalTestCount);
 
@@ -72,8 +73,6 @@ export class Subscription<Event> {
             //     signal?.addEventListener('abort', dummy)
             //     // signal?.removeEventListener('abort', dummy);
             // }
-            addedAbortListeners.push(l);
-            // console.log('abort listener added')
         }
 
         if (this.abortController.signal.aborted) {
@@ -122,8 +121,8 @@ export class Subscription<Event> {
         }
 
         return result.finally(() => {
-            for (const l of addedAbortListeners) {
-                signal?.removeEventListener('abort', l);
+            for (const remover of listenerRemovers) {
+                remover();
                 // console.log('abort listener removed')
                 --globalTestCount;
                 // console.log('globalTestCount nach remove', globalTestCount);
