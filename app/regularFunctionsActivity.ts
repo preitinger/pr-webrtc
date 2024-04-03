@@ -17,7 +17,7 @@ import timeout from "./_lib/pr-timeout/pr-timeout";
 import { time } from "console";
 import * as localStorageAccess from "./localStorageAccess";
 import { myAddEventListener } from "./_lib/pr-client-utils/eventListeners";
-import { callEachReverse, forEachReverse } from "./_lib/pr-utils";
+import { callEachReverse, forEachReverse } from "./_lib/pr-utils/pr-utils";
 import { SetupPushNotifications } from "./_lib/video/video-client-old";
 
 /**
