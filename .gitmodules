@@ -31,3 +31,6 @@
 [submodule "pr-msg-server"]
 	path = app/_lib/pr-msg-server
 	url = https://github.com/preitinger/pr-msg-server.git
+[submodule "app/_lib/pr-utils"]
+	path = app/_lib/pr-utils
+	url = https://github.com/preitinger/pr-utils
