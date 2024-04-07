@@ -741,7 +741,7 @@ export default function Page() {
     const [connectionsProps, setConnectionsProps] = useState<ConnectionsProps>(initialConnectionsProps())
     const [receivedCallProps, setReceivedCallProps] = useState<ReceivedCallProps | null>(null);
     const [hangUpProps, setHangUpProps] = useState<HangUpProps | null>(null);
-    const [viewOption, setViewOption] = useState<ViewOption>('all');
+    const [viewOption, setViewOption] = useState<ViewOption>('users');
     const [markedOptions, setMarkedOptions] = useState<{ [key: string]: boolean }>({})
     const testButtonRef = useRef<HTMLButtonElement>(null);
     const testCanvasRef = useRef<HTMLCanvasElement>(null)

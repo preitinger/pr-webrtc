@@ -58,7 +58,8 @@ self.addEventListener('push', (e) => {
         data: { url: `${self.location.origin}/accept/${encodeURIComponent(pushData.caller)}/${encodeURIComponent(pushData.callee)}` },
         tag: 'pr-webRTC call',
         requireInteraction: true,
-        silent: false
+        silent: false,
+        icon: '/accept-call-64x64.png'
     }
     const promise1 = self.registration.showNotification(`Call in pr-webRTC`, notificationOptions);
     const promise2 = self.clients.matchAll().then(clients => {
