@@ -1042,31 +1042,42 @@ export default function Page() {
                     })
                     } />
                 }            </div>
-            <OptionPage option={'users'} active={viewOption} notLoggedIn={regularPageProps == null}>
-                <MultiSelectChatUserListComp
-                    userListState={chat.userList}
-                    small={callActive}
-                    onKey={(e) => {
-                        throw new Error('nyi');
-                    }}
-                    onClick={chatOnUserClick} />
-                <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
-                    fireEvent<CallClicked>({
-                        type: 'CallClicked',
-                        callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
-                    })
+            <OptionPage option={'users'} active={viewOption}>
+                {
+                    regularPageProps == null ?
+                        <>
+                            {startPageProps != null && <StartPageComp {...startPageProps} />}
+                            {loginDlgProps != null && <LoginDlgComp {...loginDlgProps} />}
+                            {registerDlgProps != null && <RegisterDlgComp {...registerDlgProps} />}
+                        </>
+                        :
+                        <>
+                            <MultiSelectChatUserListComp
+                                userListState={chat.userList}
+                                small={callActive}
+                                onKey={(e) => {
+                                    // throw new Error('nyi');
+                                }}
+                                onClick={chatOnUserClick} />
+                            <button className={styles.accept} disabled={chat.userList.selected.length === 0} onClick={() =>
+                                fireEvent<CallClicked>({
+                                    type: 'CallClicked',
+                                    callees: chat.userList.selected.map(idx => chat.userList.users[idx].name)
+                                })
 
-                } />
-                <button className={styles.reject} onClick={() => {
-                    fireEvent<HangUpClicked>({
-                        type: 'HangUpClicked',
-                        remoteUser: null
-                    });
-                }} />
-                {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
-                {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
-                {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
-                <ChatPanelComp /* ref={chatLinesRef} */ events={errorsAndHints} linesBeingSent={chat.linesBeingSent} /* lines={chatLines} */ /* onScroll={onScroll} */ small={callActive} />
+                            } />
+                            <button className={styles.reject} onClick={() => {
+                                fireEvent<HangUpClicked>({
+                                    type: 'HangUpClicked',
+                                    remoteUser: null
+                                });
+                            }} />
+                            {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
+                            {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+                            {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
+                            <ChatPanelComp /* ref={chatLinesRef} */ events={errorsAndHints} linesBeingSent={chat.linesBeingSent} /* lines={chatLines} */ /* onScroll={onScroll} */ small={callActive} />
+                        </>
+                }
             </OptionPage>
             <OptionPage option={'config'} active={viewOption} notLoggedIn={regularPageProps == null}>
                 {regularPageProps != null &&
