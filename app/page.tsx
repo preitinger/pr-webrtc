@@ -793,6 +793,7 @@ export default function Page() {
                             case 'LoginDlg':
                                 // console.log('setting loginDlgProps to ', e.props);
                                 setLoginDlgProps(e.props);
+                                mark('users');
                                 break;
                             case 'RegisterDlg':
                                 setRegisterDlgProps(e.props);
@@ -826,6 +827,7 @@ export default function Page() {
                                 break;
                             case 'AuthFailedDlg':
                                 setAuthFailedProps(e.props);
+                                mark('users');
                                 break;
                             case 'ChatAddErrorLine':
                                 chatAddErrorLine(e.error);
@@ -1049,6 +1051,17 @@ export default function Page() {
                             {startPageProps != null && <StartPageComp {...startPageProps} />}
                             {loginDlgProps != null && <LoginDlgComp {...loginDlgProps} />}
                             {registerDlgProps != null && <RegisterDlgComp {...registerDlgProps} />}
+                            {
+                                authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                                    fireEvent<CloseClicked>({
+                                        type: 'CloseClicked',
+                                    })
+
+                                } onUseHere={() => fireEvent<UseHereClicked>({
+                                    type: 'UseHereClicked',
+                                })
+                                } />
+                            }
                         </>
                         :
                         <>
@@ -1079,14 +1092,27 @@ export default function Page() {
                         </>
                 }
             </OptionPage>
-            <OptionPage option={'config'} active={viewOption} notLoggedIn={regularPageProps == null}>
-                {regularPageProps != null &&
+            <OptionPage option={'config'} active={viewOption}>
+                {
+                    authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                        fireEvent<CloseClicked>({
+                            type: 'CloseClicked',
+                        })
+
+                    } onUseHere={() => fireEvent<UseHereClicked>({
+                        type: 'UseHereClicked',
+                    })
+                    } />
+                }
+                {regularPageProps == null ? <p>You are not logged in.</p> :
                     <>
                         <button onClick={() => fireEvent<VideoDataSettingsClicked>({
                             type: 'VideoDataSettingsClicked',
                         })
                         }>Video settings for individual connections ...</button>
+                        {hangUpProps != null && <HangUpDlgComp {...hangUpProps} />}
                         {decideIfWithVideoProps != null && <DecideIfWithVideoDlgComp {...decideIfWithVideoProps} />}
+                        {receivedCallProps && <ReceivedCallComp {...receivedCallProps} />}
 
                         <VideoConfigComp initialSendVideo={regularPageProps.sendVideo} initialReceiveVideo={regularPageProps.receiveVideo}
                             initialFitToDisplay={regularPageProps.fitToDisplay} />
@@ -1133,12 +1159,26 @@ export default function Page() {
                     </>
                 }
             </OptionPage>
-            <OptionPage option='chat' active={viewOption} notLoggedIn={regularPageProps == null}>
-                <div className={styles.flexColumn}>
-                    {chatComponents}
-                </div>
+            <OptionPage option='chat' active={viewOption}>
+                {
+                    authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                        fireEvent<CloseClicked>({
+                            type: 'CloseClicked',
+                        })
+
+                    } onUseHere={() => fireEvent<UseHereClicked>({
+                        type: 'UseHereClicked',
+                    })
+                    } />
+                }
+                {
+                    regularPageProps == null ? <p>You are not logged in.</p> :
+                        <div className={styles.flexColumn}>
+                            {chatComponents}
+                        </div>
+                }
             </OptionPage>
-            <OptionPage option='video' active={viewOption} notLoggedIn={regularPageProps == null}>
+            <OptionPage option='video' active={viewOption}>
                 {/* <button onClick={async () => {
                     if (testButtonRef.current != null) {
                         const canvas = new OffscreenCanvas(32, 32);
@@ -1177,7 +1217,21 @@ export default function Page() {
                         [el.value]: !(d[el.value] ?? false)
                     }))
                 }}>Toggle mark</button> */}
-                <ConnectionsComp {...connectionsProps} localMediaStream={localMediaStream ?? undefined} />
+                {
+                    authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
+                        fireEvent<CloseClicked>({
+                            type: 'CloseClicked',
+                        })
+
+                    } onUseHere={() => fireEvent<UseHereClicked>({
+                        type: 'UseHereClicked',
+                    })
+                    } />
+                }
+                {
+                    regularPageProps == null ? <p>You are not logged in.</p> :
+                        <ConnectionsComp {...connectionsProps} localMediaStream={localMediaStream ?? undefined} />
+                }
             </OptionPage>
             <OptionPage option='all' active={viewOption}>
                 <div>
@@ -1316,25 +1370,25 @@ fetchErrorDuringLogin != null &&
                         }
                     </main>
 
-                    {
-                        modalMsg != null &&
-                        <ModalDialog >
-                            <p>{modalMsg}</p>
-                            <ButtonRow><button onClick={() => {
-                                setModalMsg(null); fireEvent<OkClicked>({
-                                    type: 'OkClicked',
-                                })
-                            }
-                            }>OK</button></ButtonRow>
-                        </ModalDialog>
-                    }
-
-                    {
-                        fetchError != null &&
-                        <FetchErrorComp error={fetchError} />
-                    }
                 </div>
             </OptionPage>
+            {
+                modalMsg != null &&
+                <ModalDialog >
+                    <p>{modalMsg}</p>
+                    <ButtonRow><button onClick={() => {
+                        setModalMsg(null); fireEvent<OkClicked>({
+                            type: 'OkClicked',
+                        })
+                    }
+                    }>OK</button></ButtonRow>
+                </ModalDialog>
+            }
+
+            {
+                fetchError != null &&
+                <FetchErrorComp error={fetchError} />
+            }
         </>
     )
 }
