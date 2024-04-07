@@ -11,7 +11,7 @@ import { PushData } from "@/app/_lib/video/video-common";
 
 export type Version = number
 
-const version: Version = 16
+const version: Version = 17
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -19,20 +19,39 @@ console.log('Custom service worker functions for pr-webrtc: version=', version);
 
 self.addEventListener('notificationclick', e => {
     console.log('notificationclick with action', e.action);
+    e.notification.data
     const pushData: any = JSON.parse(e.action);
-    let promiseChain: Promise<WindowClient | null> | null = null;
+
+    if ('url' in e.notification.data) {
+        console.log('url', e.notification.data.url);
+    }
     if (PushData.guard(pushData)) {
+        e.notification.close();
         console.log('self.origin', self.origin);
-        promiseChain = self.clients.openWindow(self.origin)
+        const p = self.clients.matchAll().then(c => {
+            let couldFocus = false;
+            c.forEach(client => {
+                if ('focus' in client && typeof client.focus === 'function') {
+                    client.focus();
+                    couldFocus = true;
+                } else {
+                    console.warn('no focus method in client');
+                }
+            })
+
+            if (!couldFocus) {
+                console.log('open window for url', e.notification.data.url)
+                return self.clients.openWindow(e.notification.data.url);
+            }
+        })
+
+        e.waitUntil(p)
     }
 
-    if (promiseChain != null) {
-        e.waitUntil(promiseChain);
-    }
 })
 
 self.addEventListener('push', (e) => {
-    
+
     console.log('push event: e=', e);
     const pushData = e.data?.json();
     console.log('e.data?.json()', pushData)
@@ -42,22 +61,16 @@ self.addEventListener('push', (e) => {
     }
     const notificationOptions: NotificationOptions = {
         body: `${pushData.caller} calling ${pushData.callee} (self.origin: ${self.origin})`,
-        // requireInteraction: true,
-        actions: [
-            {
-                title: 'Accept call',
-                action: JSON.stringify(pushData)
-            }
-        ]
+        data: { url: `${self.location.origin}/accept/${encodeURIComponent(pushData.caller)}/${encodeURIComponent(pushData.callee)}` },
 
     }
-    const promiseChain = self.registration.showNotification('Call in pr-webRTC', notificationOptions);
-    self.clients.matchAll().then(clients => {
+    const promise1 = self.registration.showNotification('Call in pr-webRTC', notificationOptions);
+    const promise2 = self.clients.matchAll().then(clients => {
         console.log('clients.length', clients.length);
         clients.forEach(client => {
             console.log('sending push to', client);
             client.postMessage(e.data?.json());
         })
     })
-    e.waitUntil(promiseChain);
+    e.waitUntil(Promise.all([promise1, promise2]))
 })
