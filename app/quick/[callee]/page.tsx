@@ -16,7 +16,7 @@ export default function Page({ params }: { params: { callee: string } }) {
     function onCall() {
 
         sessionStorage.setItem('callee', callee);
-        router.push('/');
+        router.replace('/');
     }
 
     return (

@@ -264,6 +264,8 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                         initialUsers: requestResp.users,
                         eventIdForUsers: requestResp.eventIdForUsers
                     }
+                    localStorage.user = user;
+                    localStorage.passwd = passwd;
                     token = requestResp.token;
                     const authenticatedActionsRes = await authenticatedActions(loginResultData, signal);
                     switch (authenticatedActionsRes) {
@@ -1193,17 +1195,35 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
 
         // activity implementation starts here
 
-        const callee = sessionStorage['callee'];
-        if (callee != null) {
-            user = localStorage['user'];
-            passwd = localStorage['passwd'];
-        }
-
         manageFetching(routeActivitySignal).catch(reason => {
             if (reason.name !== 'AbortError') {
                 console.error(reason);
             }
         });
+
+        const callee = sessionStorage['callee'];
+        const accept = sessionStorage['accept'];
+        if (callee != null || accept != null) {
+            user = localStorage['user'];
+            passwd = localStorage['passwd'];
+
+            if (user == null || passwd == null) {
+                const loginDlgResp = await loginDlg(user ?? '', passwd ?? '', null, routeActivitySignal)
+                switch (loginDlgResp.type) {
+                    case 'LoginOrRegisterOk':
+                        user = loginDlgResp.user;
+                        passwd = loginDlgResp.passwd;
+                        await loginLoop(routeActivitySignal);
+                        break;
+
+                    case 'CancelClicked':
+                        await startPage(routeActivitySignal);
+                        break;
+                }
+            } else {
+                await loginLoop(routeActivitySignal);
+            }
+        }
 
         // no endless recursion, so this while-loop:
         while (true) {

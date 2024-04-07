@@ -1,4 +1,4 @@
-export default function Page({ params }: { params: { caller: string }}) {
+export default function Page({ params }: { params: { caller: string; }}) {
     const caller = decodeURIComponent(params.caller);
     
     return (
