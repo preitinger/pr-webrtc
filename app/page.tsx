@@ -1097,6 +1097,38 @@ export default function Page() {
                             })
                             }>{cameraTestButtonText}</button>
                         }
+                        {
+                            <div className={styles.flexRow}>
+                                {/* <button className={styles.redButton} onClick={() => fireEvent<LogoutClicked>({
+                                    type: 'LogoutClicked',
+                                })
+                                }>Logout</button> */}
+                                <button onClick={() => fireEvent<WaitForPushClicked>({
+                                    type: 'WaitForPushClicked',
+                                })
+                                }>Wait for push notification ...</button>
+                            </div>
+                        }
+                        {
+                            setupPushProps != null &&
+                            <SetupPushComp {...setupPushProps} onOk={() => fireEvent<OkClicked>({
+                                type: 'OkClicked',
+                            })
+                            } onCancel={() => fireEvent<CancelClicked>({
+                                type: 'CancelClicked',
+                            })
+                            } onTryAgain={() => fireEvent<TryAgainClicked>({
+                                type: 'TryAgainClicked',
+                            })
+                            } />
+                        }
+                        {
+                            awaitPushProps != null &&
+                            <AwaitPushComp {...awaitPushProps} onCancel={() => fireEvent<CancelClicked>({
+                                type: 'CancelClicked',
+                            })
+                            } />
+                        }
 
                     </>
                 }
