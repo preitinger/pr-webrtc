@@ -11,11 +11,20 @@ import { PushData } from "@/app/_lib/video/video-common";
 
 export type Version = number
 
-const version: Version = 11
+const version: Version = 15
 
 declare const self: ServiceWorkerGlobalScope;
 
 console.log('Custom service worker functions for pr-webrtc: version=', version);
+
+self.addEventListener('notificationclick', e => {
+    console.log('notificationclick with action', e.action);
+    const pushData: any = JSON.parse(e.action);
+    if (PushData.guard(pushData)) {
+        console.log('self.origin', self.origin);
+        self.clients.openWindow(self.origin)
+    }
+})
 
 self.addEventListener('push', (e) => {
     
@@ -26,10 +35,18 @@ self.addEventListener('push', (e) => {
         console.error('Unexpected pushData', pushData)
         return;
     }
-    self.registration.showNotification('Call in pr-webRTC', {
-        body: `${pushData.caller} calling ${pushData.callee}`,
-        requireInteraction: true
-    })
+    const notificationOptions: NotificationOptions = {
+        body: `${pushData.caller} calling ${pushData.callee} (self.origin: ${self.origin})`,
+        // requireInteraction: true,
+        actions: [
+            {
+                title: 'Accept call',
+                action: JSON.stringify(pushData)
+            }
+        ]
+
+    }
+    const promiseChain = self.registration.showNotification('Call in pr-webRTC', notificationOptions);
     self.clients.matchAll().then(clients => {
         console.log('clients.length', clients.length);
         clients.forEach(client => {
@@ -37,4 +54,5 @@ self.addEventListener('push', (e) => {
             client.postMessage(e.data?.json());
         })
     })
+    e.waitUntil(promiseChain);
 })
