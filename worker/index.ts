@@ -11,7 +11,7 @@ import { PushData } from "@/app/_lib/video/video-common";
 
 export type Version = number
 
-const version: Version = 15
+const version: Version = 16
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -20,9 +20,14 @@ console.log('Custom service worker functions for pr-webrtc: version=', version);
 self.addEventListener('notificationclick', e => {
     console.log('notificationclick with action', e.action);
     const pushData: any = JSON.parse(e.action);
+    let promiseChain: Promise<WindowClient | null> | null = null;
     if (PushData.guard(pushData)) {
         console.log('self.origin', self.origin);
-        self.clients.openWindow(self.origin)
+        promiseChain = self.clients.openWindow(self.origin)
+    }
+
+    if (promiseChain != null) {
+        e.waitUntil(promiseChain);
     }
 })
 
