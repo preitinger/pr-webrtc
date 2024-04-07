@@ -2,7 +2,7 @@ import { ForwardedRef, PropsWithRef, Ref, forwardRef, useCallback, useEffect, us
 
 import styles from './video-client.module.css'
 import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
-import { AuthenticatedVideoReq, CheckCallReq, CheckCallResp, StoreMsgReq, StoreMsgResp } from "./video-common";
+import { AuthenticatedVideoReq, CheckCallReq, CheckCallResp, StoreMsgReq, StoreMsgResp } from "./video-common-old";
 import { ReceivedCall } from "./VideoManager";
 import Image from "next/image";
 import ModalDialog from "@/components/ModalDialog";

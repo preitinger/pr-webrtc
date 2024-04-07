@@ -1,7 +1,7 @@
 import { pushApiStart } from "../pr-push-api-client/pr-push-api-client";
 import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
 import { ToolbarData, ToolbarDataPart, VideoToolbarEvent } from "./video-client";
-import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, DeletePushSubscriptionReq, DeletePushSubscriptionResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, SavePushSubscriptionReq, WebRTCMsgReq, WebRTCMsgResp } from "./video-common";
+import { AcceptCallReq, AcceptCallResp, AuthenticatedVideoReq, CheckAcceptReq, CheckAcceptResp, CheckCallReq, CheckCallResp, DeletePushSubscriptionReq, DeletePushSubscriptionResp, HangUpReq, HangUpResp, OfferCallReq, OfferCallResp, RejectCallReq, RejectCallResp, SavePushSubscriptionReq, WebRTCMsgReq, WebRTCMsgResp } from "./video-common-old";
 
 export interface ReceivedCall {
     caller: string;

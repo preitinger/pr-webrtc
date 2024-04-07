@@ -1,8 +1,7 @@
 import { ForwardedRef, PropsWithRef, Ref, forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
 import styles from './video-client.module.css'
-import { AccumulatedFetcher } from "../user-management-client/apiRoutesClient";
-import { AuthenticatedVideoReq, CheckCallReq, CheckCallResp, StoreMsgReq, StoreMsgResp } from "./video-common";
+// import { AuthenticatedVideoReq, CheckCallReq, CheckCallResp, StoreMsgReq, StoreMsgResp } from "./video-common-old";
 import { ReceivedCall } from "./VideoManager";
 import Image from "next/image";
 import ModalDialog from "@/components/ModalDialog";
@@ -19,6 +18,7 @@ import EventBus from "../EventBus";
 import { Boolean, Literal, Record, Static, String, Union } from "runtypes";
 import { getEventBus, useEventBus } from "@/app/useEventBus";
 import { ChatAddErrorLine } from "@/app/busEvents";
+import { deprecate } from "util";
 
 
 export interface VideoProps {
@@ -427,7 +427,7 @@ interface PeerConnectionState {
     debug: PeerConnectionDebugData;
 }
 
-export function useVideo(props: UseVideoProps): UseVideoResult {
+export const useVideo = deprecate(function useVideo(props: UseVideoProps): UseVideoResult {
     const [active, setActive] = useState<boolean>(false);
     const [defaultSendVideo, setDefaultSendVideo] = useState<boolean>(true);
     const [defaultReceiveVideo, setDefaultReceiveVideo] = useState<boolean>(true);
@@ -458,7 +458,7 @@ export function useVideo(props: UseVideoProps): UseVideoResult {
 
     }
 
-}
+}, 'useVideo is no longer supported')
 
 // type SignalingMsg = {
 //     type: 'offer';

@@ -7,17 +7,29 @@
 // Even tho this is not really a module and cannot be: ServiceWorkers
 // cannot be modules.
 
+import { PushData } from "@/app/_lib/video/video-common";
+
 export type Version = number
 
-const version: Version = 10
+const version: Version = 11
 
 declare const self: ServiceWorkerGlobalScope;
 
 console.log('Custom service worker functions for pr-webrtc: version=', version);
 
 self.addEventListener('push', (e) => {
+    
     console.log('push event: e=', e);
-    console.log('e.data?.json()', e.data?.json())
+    const pushData = e.data?.json();
+    console.log('e.data?.json()', pushData)
+    if (!PushData.guard(pushData)) {
+        console.error('Unexpected pushData', pushData)
+        return;
+    }
+    self.registration.showNotification('Call in pr-webRTC', {
+        body: `${pushData.caller} calling ${pushData.callee}`,
+        requireInteraction: true
+    })
     self.clients.matchAll().then(clients => {
         console.log('clients.length', clients.length);
         clients.forEach(client => {
