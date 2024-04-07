@@ -1218,7 +1218,7 @@ fetchErrorDuringLogin != null &&
                             })
                             } />
                         }
-                        {regularPageProps != null &&
+                        {setupPushProps == null && awaitPushProps == null && regularPageProps != null &&
                             <>
                                 <div className={styles.left}>
                                     <MultiSelectChatUserListComp

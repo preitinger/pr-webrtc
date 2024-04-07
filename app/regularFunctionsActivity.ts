@@ -1,11 +1,11 @@
 import assert from "assert";
 import * as rt from "runtypes"
-import EventBus, { waitForGuard } from "./_lib/EventBus";
+import EventBus, { Subscription, waitForGuard } from "./_lib/EventBus";
 import chainedAbortController from "./_lib/pr-client-utils/chainedAbortController";
 import { MsgClient } from "./_lib/pr-msg-client/pr-msg-client";
 import { MsgReq, MsgResp } from "./_lib/pr-msg-common/pr-msg-common";
-import { AuthenticatedVideoReq, PushNotifyReq, PushNotifyResp } from "./_lib/video/video-common";
-import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp, PushNotificationsShutdown } from "./busEvents";
+import { AuthenticatedVideoReq, PushNotifyReq, PushNotifyResp, PushSubscribeReq, PushSubscribeResp } from "./_lib/video/video-common";
+import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp, PushNotificationsShutdown, SetupPushDlg, FetchingInterruptedRecursive, AwaitPushDlg, SetPushError, TryAgainClicked } from "./busEvents";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
 import { ApiResp } from "./_lib/user-management-client/user-management-common/apiRoutesCommon";
 import { RemoteMsg } from "./busEvents";
@@ -30,6 +30,11 @@ function nyi(): void {
         console.error(reason);
     }
 }
+
+const subscriptionOptions = {
+    userVisibleOnly: true,
+    applicationServerKey: "BPz5hyoDeI73Jgu6-rxgQmz2-WMQnDh4vMGszZO8-fBWPo0UV9yJsWYScxJqRMJpxAS1WxnvDoescRPeaPM6VGs"
+};
 
 export default async function regularFunctions(eventBusKey: string, accumulatedFetching: AccumulatedFetching, user: string, token: string, outerSignal: AbortSignal): Promise<LogoutClicked | AuthFailed> {
 
@@ -167,11 +172,16 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         case 'fetchingBeforeInterrupt':
 
                             forwardToConnections(resp);
+                            const success = Object.keys(connections).length === 0;
                             fireEvent<CallsInterruptResult>({
                                 type: 'CallsInterruptResult',
-                                success: Object.keys(connections).length === 0
+                                success: success
                             })
-                            st = 'interrupted';
+                            if (success) {
+                                st = 'interrupted';
+                            } else {
+                                receiveTimerEnter();
+                            }
                             break;
                         default:
                             console.error('nyi', st);
@@ -381,7 +391,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         case 'CallClicked':
                             const withVideo = await handleCallClick(e.callees, signal);
                             if (withVideo != null) {
-                                addOrUpdateConnections(withVideo);
+                                addOrUpdateConnectionsAndSendPushNotifications(withVideo);
                             }
                             break;
 
@@ -858,7 +868,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             }
         }
 
-        function addOrUpdateConnections(withVideo: {
+        function addOrUpdateConnectionsAndSendPushNotifications(withVideo: {
             [callee: string]: WithVideo;
         }) {
             for (const remoteUser in withVideo) {
@@ -900,6 +910,10 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                         }
                     });
                 }
+                authenticatedVideoReq<PushNotifyReq, PushNotifyResp>({
+                    type: 'pushNotify',
+                    callee: remoteUser
+                }, signal)
             }
         }
 
@@ -983,6 +997,19 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         return consAtShutdown;
     }
 
+    async function authenticatedVideoReq<Req, Resp>(req: Req, signal: AbortSignal): Promise<ApiResp<Resp>> {
+        assert(user != null);
+        assert(token != null);
+
+        const authReq: AuthenticatedVideoReq<Req> = {
+            type: 'authenticatedVideoReq',
+            ownUser: user,
+            req: req,
+            sessionToken: token
+        }
+        return await accumulatedFetching.push<AuthenticatedVideoReq<Req>, Resp>(authReq, signal);
+    }
+
     async function managePushNotifications(signal: AbortSignal): Promise<void> {
         let regularFunctionsShutdown = false;
 
@@ -1009,76 +1036,234 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                 async function () {
                                     function waitForMsgFromServiceWorker(signal: AbortSignal): Promise<any | null> {
                                         // Requirements:
-                                        // * throws AbortError on signal
+                                        // * rejects with AbortError on signal
                                         // * sets up an event listener for 'message' and return the message if one is received
                                         // * returns null if PushNotificationsShutdown or RegularFunctionsShutdown is published by the eventBus
-
-                                        // Best solution:
-                                        // create an own AbortController that is used for the message event listener
-                                        // call the AbortController.abort() in any of the cases that make waitForMsgFromServiceWorker stop
-
-                                        const tidyUpFuncs: (() => void)[] = [];
-                                        const subscr = eventBus.subscribe();
-                                        return new Promise<string | null>((res, rej) => {
+                                        {
+                                            const releaseFuncs: (() => void)[] = [];
+                                            const subscr = eventBus.subscribe();
                                             const [abortController, releaseAbortController] = chainedAbortController(signal);
-                                            async function handleEventBus() {
-                                                const MyEvent = rt.Union(RegularFunctionsShutdown, PushNotificationsShutdown);
-                                                while (true) {
-                                                    signal.throwIfAborted();
-                                                    const e = await waitForGuard({ subscr: subscr }, MyEvent, abortController.signal);
-                                                    res(null);
-                                                    abortController.abort();
-                                                }
-                                            }
-                                            tidyUpFuncs.push(releaseAbortController);
-                                            tidyUpFuncs.push(myAddEventListener<MessageEvent<any>>(navigator.serviceWorker, 'message', (e) => {
-                                                res(e.data);
-                                                abortController.abort();
-                                            }, {
-                                                signal: abortController.signal
-                                            }))
 
-                                        }).finally(() => {
-                                            callEachReverse(tidyUpFuncs);
-                                            subscr.unsubscribe();
-                                        })
+                                            return new Promise<any | null>((res, rej) => {
+                                                releaseFuncs.push(
+                                                    myAddEventListener<MessageEvent<any>>(navigator.serviceWorker, 'message', e => {
+                                                        abortController.abort();
+                                                        res(e.data);
+                                                    }),
+                                                    myAddEventListener(signal, 'abort', () => {
+                                                        rej(signal.reason);
+                                                    })
+                                                )
+                                                async function handleBusEvents(): Promise<void> {
+                                                    abortController.signal.throwIfAborted();
+                                                    const e = await waitForGuard({ subscr: subscr }, rt.Union(PushNotificationsShutdown, RegularFunctionsShutdown), abortController.signal);
+                                                    res(null);
+
+                                                }
+                                                handleBusEvents().catch((reason: any) => {
+                                                    if (reason.name !== 'AbortError') {
+                                                        console.error('handleBusEvents:', reason);
+                                                    }
+                                                }).finally(() => {
+                                                })
+                                            }).finally(() => {
+                                                releaseAbortController();
+                                                subscr.unsubscribe();
+                                                callEachReverse(releaseFuncs);
+                                            })
+                                        }
                                     }
-                                    const msg = waitForMsgFromServiceWorker(signal);
+                                    const msg = await waitForMsgFromServiceWorker(signal);
                                     if (msg != null) {
                                         doPushNotificationsShutdown();
                                     }
                                 }(),
-                                async function () {
-                                    function setupPushNotifications(signal: AbortSignal):Promise<PushSubscription | null> {
 
-                                        nyi();
-                                        throw new Error('nyi');
+                                async function () {
+
+                                    async function setupPushNotifications(subscr: Subscription<unknown>, signal: AbortSignal): Promise<PushSubscription | null> {
+
+                                        async function createPushSubscription(): Promise<{ subscription: PushSubscription } | { error: string }> {
+                                            try {
+                                                const pushManager = (await navigator.serviceWorker.ready).pushManager;
+                                                let subscription = await pushManager.getSubscription()
+                                                if (subscription == null) {
+                                                    subscription = await pushManager.subscribe(subscriptionOptions);
+                                                }
+                                                return { subscription: subscription };
+
+                                            } catch (reason: any) {
+                                                let error: string;
+                                                if (reason.name === 'NotAllowedError' || reason.name === 'NotFoundError' || reason.name === 'NotSupportedError') {
+                                                    error = reason.message;
+                                                } else {
+                                                    console.error(reason);
+                                                    error = 'Unexpected error';
+                                                }
+                                                return { error: error }
+                                            } finally {
+                                            }
+                                        }
+
+                                        /**
+                                         * @returns error if any, otherwise null
+                                         * @param subscription 
+                                         */
+                                        async function sendPushSubscriptionToServer(subscription: PushSubscription): Promise<string | null> {
+
+                                            const resp = await authenticatedVideoReq<PushSubscribeReq, PushSubscribeResp>({
+                                                type: 'pushSubscribe',
+                                                subscription: JSON.stringify(subscription),
+                                            }, signal)
+                                            switch (resp.type) {
+                                                case 'success':
+                                                    return null;
+                                                case 'error':
+                                                    return resp.error;
+                                            }
+                                        }
+
+                                        /**
+                                         * @returns true iff user wants to try again
+                                         * @param error 
+                                         */
+                                        async function pushError(subscr: Subscription<unknown>, error: string, signal: AbortSignal): Promise<boolean> {
+                                            fireEvent<SetPushError>({
+                                                type: 'SetPushError',
+                                                error: error
+                                            });
+                                            const e = await waitForGuard({ subscr: subscr }, rt.Union(TryAgainClicked, CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                            return e.type === 'TryAgainClicked';
+                                        }
+
+                                        fireEvent<SetupPushDlg>({
+                                            type: 'SetupPushDlg',
+                                            props: {
+                                                error: null
+                                            }
+                                        });
+
+                                        try {
+
+                                            const e = await waitForGuard({ subscr: subscr }, rt.Union(OkClicked, CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                            switch (e.type) {
+                                                case 'OkClicked':
+                                                    while (true) {
+                                                        signal.throwIfAborted();
+                                                        const subscriptionRes = await createPushSubscription();
+                                                        if ('subscription' in subscriptionRes) {
+                                                            const subscription = subscriptionRes.subscription;
+                                                            const error: string | null = await sendPushSubscriptionToServer(subscription);
+                                                            if (error != null) {
+                                                                const tryAgain = await pushError(subscr, error, signal);
+                                                                if (!tryAgain) {
+                                                                    return null;
+                                                                }
+                                                            } else {
+                                                                return subscription;
+                                                            }
+                                                        } else {
+                                                            const tryAgain = await pushError(subscr, subscriptionRes.error, signal);
+                                                            if (!tryAgain) {
+                                                                return null;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    break;
+                                                default:
+                                                    return null;
+                                            }
+                                        } finally {
+                                            fireEvent<SetupPushDlg>({
+                                                type: 'SetupPushDlg',
+                                                props: null
+                                            });
+                                        }
                                     }
+
                                     fireEvent<CallsInterrupt>({
                                         type: 'CallsInterrupt',
                                     });
-                                    const e = await waitForGuard({ bus: eventBus }, rt.Union(CallsInterruptResult, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
-                                    switch (e.type) {
-                                        case 'CallsInterruptResult':
-                                            if (!e.success) {
-                                                fireEvent<ModalDlg>({
-                                                    type: 'ModalDlg',
-                                                    msg: 'Please hang up your calls, first!'
-                                                });
-                                                await waitForGuard({bus: eventBus}, OkClicked, signal);
-                                                doPushNotificationsShutdown();
-                                            } else {
-                                                const pushSubscription = await setupPushNotifications(signal);
+                                    const subscr = eventBus.subscribe();
+                                    try {
+                                        const e = await waitForGuard({ bus: eventBus }, rt.Union(CallsInterruptResult, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                        switch (e.type) {
+                                            case 'CallsInterruptResult':
+                                                if (!e.success) {
+                                                    fireEvent<ModalDlg>({
+                                                        type: 'ModalDlg',
+                                                        msg: 'Please hang up your calls, first!'
+                                                    });
+                                                    await waitForGuard({ bus: eventBus }, OkClicked, signal);
+                                                    doPushNotificationsShutdown();
+                                                } else {
+                                                    const pushSubscription = await setupPushNotifications(subscr, signal);
 
-                                            }
+                                                    if (pushSubscription == null) {
+                                                        fireEvent<CallsCont>({
+                                                            type: 'CallsCont',
+                                                        });
+                                                        doPushNotificationsShutdown();
+                                                    } else {
+                                                        fireEvent<FetchingInterruptedRecursive>({
+                                                            type: 'FetchingInterruptedRecursive',
+                                                            interrupted: true
+                                                        });
+                                                        fireEvent<AwaitPushDlg>({
+                                                            type: 'AwaitPushDlg',
+                                                            props: {
+                                                            }
+                                                        });
+                                                        const e = await waitForGuard({ subscr: subscr }, rt.Union(CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                                        fireEvent<FetchingInterruptedRecursive>({
+                                                            type: 'FetchingInterruptedRecursive',
+                                                            interrupted: false
+                                                        });
+                                                        fireEvent<AwaitPushDlg>({
+                                                            type: 'AwaitPushDlg',
+                                                            props: null
+                                                        });
+                                                        switch (e.type) {
+                                                            case 'RegularFunctionsShutdown':
+                                                                regularFunctionsShutdown = true;
+                                                                break;
+                                                            case 'CancelClicked':
+                                                                doPushNotificationsShutdown();
+                                                                // callsCont()
+                                                                fireEvent<CallsCont>({
+                                                                    type: 'CallsCont',
+                                                                });
+                                                                break;
+                                                            case 'PushNotificationsShutdown':
+                                                                fireEvent<CallsCont>({
+                                                                    type: 'CallsCont',
+                                                                });
+                                                                break;
+                                                        }
+
+                                                    }
+
+                                                }
+                                                break;
+
+                                            default:
+                                                doPushNotificationsShutdown();
+                                                break;
+                                        }
+
+                                    } finally {
+                                        subscr.unsubscribe();
                                     }
-                                    nyi();
                                 }()
+
                             ])
                             break;
                         }
 
                         case 'RegularFunctionsShutdown':
+                            regularFunctionsShutdown = true; // probably not really necessary, but for convenient invariant that this flag is always set when event RegularFunctionsShutdown has been received.
+
                             return;
                     }
                 }
@@ -1090,6 +1275,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }())
 
         promises.push(async function () {
+
             const subscr = eventBus.subscribe();
             try {
                 while (!regularFunctionsShutdown) {
@@ -1131,7 +1317,6 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }
     }
 
-    // TODO implement
     const eventBus = getEventBus(eventBusKey);
     function fireEvent<T = any>(e: T) {
         eventBus.publish(e);
@@ -1182,7 +1367,6 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
 
 
-    nyi();
 
     // old outdated implementation:
     // const eventBus = getEventBus(eventBusKey);
