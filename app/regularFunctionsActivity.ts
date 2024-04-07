@@ -397,7 +397,9 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                             break;
 
                         case 'EnqueueCall':
-                            await connections[e.remoteUser].onDequeueCall();
+                            if (connections[e.remoteUser] != null) {
+                                await connections[e.remoteUser].onDequeueCall();
+                            }
                             break;
 
                         case 'VideoDataSettingsClicked': {
