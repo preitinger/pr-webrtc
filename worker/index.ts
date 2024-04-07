@@ -11,7 +11,7 @@ import { PushData } from "@/app/_lib/video/video-common";
 
 export type Version = number
 
-const version: Version = 19
+const version: Version = 20
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -39,7 +39,7 @@ self.addEventListener('notificationclick', e => {
                 }
             })
 
-            if (!couldFocus) {
+            if (!couldFocus || true) {
                 console.log('open window for url', e.notification.data.url)
                 return self.clients.openWindow(e.notification.data.url);
             }
