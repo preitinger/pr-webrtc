@@ -11,7 +11,7 @@ import { PushData } from "@/app/_lib/video/video-common";
 
 export type Version = number
 
-const version: Version = 22
+const version: Version = 23
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -54,13 +54,13 @@ self.addEventListener('push', (e) => {
         return;
     }
     const notificationOptions: NotificationOptions = {
-        body: `${pushData.caller} calling ${pushData.callee} (self.origin: ${self.origin})`,
+        body: `${pushData.caller} calling ${pushData.callee}`,
         data: { url: `${self.location.origin}/accept/${encodeURIComponent(pushData.caller)}/${encodeURIComponent(pushData.callee)}` },
         tag: 'pr-webRTC call',
         requireInteraction: true,
         silent: false
     }
-    const promise1 = self.registration.showNotification(`Call in pr-webRTC[${version}]`, notificationOptions);
+    const promise1 = self.registration.showNotification(`Call in pr-webRTC`, notificationOptions);
     const promise2 = self.clients.matchAll().then(clients => {
         console.log('clients.length', clients.length);
         clients.forEach(client => {
