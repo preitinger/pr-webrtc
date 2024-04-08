@@ -72,7 +72,7 @@ self.addEventListener('push', (e) => {
     const notificationOptions: NotificationOptions = {
         body: `${pushData.caller} calling ${pushData.callee}`,
         data: { url: `${self.location.origin}/accept/${encodeURIComponent(pushData.caller)}/${encodeURIComponent(pushData.callee)}` },
-        tag: 'pr-webRTC call',
+        // tag: 'pr-webRTC call',
         requireInteraction: true,
         silent: false,
         icon: '/accept-call-64x64.png'
