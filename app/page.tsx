@@ -16,6 +16,7 @@ import useTardyFlag from "./_lib/pr-client-utils/useTardyFlag";
 import ModalDialog from "@/components/ModalDialog";
 import { VideoComp } from "./_lib/video/video-client";
 import { ChatEvent } from "./_lib/chat/chat-common";
+import { log } from "console";
 
 const eventBusKey = 'pr-webrtc';
 const chatId = 'pr-webrtc';
@@ -1008,11 +1009,20 @@ export default function Page() {
         setMarkedOptions(d => ({
             ...d,
             [option]: marked
-        }))
+
+
+        })
+        )
     }
+
+    useEffect(() => {
+        const str = sessionStorage['viewOption'];
+        if (str != null) setViewOption(str);
+    }, [])
 
     const onTopMenuItemClick = (option: ViewOption) => () => {
         setViewOption(option);
+        sessionStorage['viewOption'] = option;
         setTopMenuItemMarked(option, false);
     }
 

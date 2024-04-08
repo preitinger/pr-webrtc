@@ -93,8 +93,8 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
     //     return Promise.race([abortPromise, waitForGuard({bus: eventBus}, guard)]);
     // }
 
-    let user: string | null = null;
-    let passwd: string | null = null;
+    let user: string | null = sessionStorage.user ?? null;
+    let passwd: string | null = sessionStorage.passwd ?? null;
     let token: string | null = null;
 
     async function authenticatedVideoReq<Req, Resp>(req: Req, signal: AbortSignal): Promise<ApiResp<Resp>> {
@@ -266,6 +266,8 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                     }
                     localStorage.user = user;
                     localStorage.passwd = passwd;
+                    sessionStorage.user = user;
+                    sessionStorage.passwd = passwd;
                     token = requestResp.token;
                     const authenticatedActionsRes = await authenticatedActions(loginResultData, signal);
                     switch (authenticatedActionsRes) {
@@ -1203,9 +1205,9 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
 
         const callee = sessionStorage['callee'];
         const accept = sessionStorage['accept'];
-        if (callee != null || accept != null) {
-            user = localStorage['user'];
-            passwd = localStorage['passwd'];
+        if (callee != null || accept != null || (user != null && passwd != null)) {
+            if (user == null) user = localStorage['user'];
+            if (passwd == null) passwd = localStorage['passwd'];
 
             if (user == null || passwd == null) {
                 const loginDlgResp = await loginDlg(user ?? '', passwd ?? '', null, routeActivitySignal)
