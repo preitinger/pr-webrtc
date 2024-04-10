@@ -108,6 +108,12 @@ export const ChatAddHintLine = rt.Record({
 })
 export type ChatAddHintLine = rt.Static<typeof ChatAddHintLine> 
 
+export const ChatAddDbgLine = rt.Record({
+    type: rt.Literal('ChatAddDbgLine'),
+    msg: rt.String
+})
+export type ChatAddDbgLine = rt.Static<typeof ChatAddDbgLine>
+
 // export const ShowFetchErrorDuringLogin = rt.Record({
 //     type: rt.Literal('ShowFetchErrorDuringLogin'),
 //     error: rt.Union(rt.String, rt.Null)
@@ -184,6 +190,8 @@ export type VideoConfigValue = rt.Static<typeof VideoConfigValue>
 export const RegularPageProps = rt.Record({
     sendVideo: VideoConfigValue,
     receiveVideo: VideoConfigValue,
+    ringOnCall: rt.Boolean,
+    debugMessages: rt.Boolean,
     fitToDisplay: rt.Boolean
 })
 export type RegularPageProps = rt.Static<typeof RegularPageProps>

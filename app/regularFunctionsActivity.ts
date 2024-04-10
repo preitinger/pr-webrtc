@@ -6,7 +6,7 @@ import { MsgClient } from "./_lib/pr-msg-client/pr-msg-client";
 import { MsgReq, MsgResp } from "./_lib/pr-msg-common/pr-msg-common";
 import { AuthenticatedVideoReq } from "./_lib/video/video-common-old";
 import { PushNotifyReq, PushNotifyResp, PushSubscribeReq, PushSubscribeResp } from "./_lib/video/video-common";
-import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp, PushNotificationsShutdown, SetupPushDlg, FetchingInterruptedRecursive, AwaitPushDlg, SetPushError, TryAgainClicked } from "./busEvents";
+import { FetchError, LogoutClicked, AuthFailed, WaitForPushClicked, CallClicked, ChatAddErrorLine, RemoteMsgReceived, VideoDataSettingsClicked, DecideIfWithVideoDlg, VideoDecisionDictionary, DecideIfWithVideoProps, ReceiveVideoChanged, SendVideoChanged, OkClicked, CancelClicked, ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown, VideoSenderCountUpdate, CallsInterruptResult, CallsInterrupt, CallsCont, ReceivedCallDlg, AddToSend, SetCameraTestButton, CameraTestClicked, LocalMediaStream, ModalDlg, SetCallActive, EnqueueCall, VideoDecision, HangUpClicked, HangUpDlg, HangUp, ConnectionProps, SetConnectionComp, PushNotificationsShutdown, SetupPushDlg, FetchingInterruptedRecursive, AwaitPushDlg, SetPushError, TryAgainClicked, Busy, ConfigChanged } from "./busEvents";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
 import { ApiResp } from "./_lib/user-management-client/user-management-common/apiRoutesCommon";
 import { RemoteMsg } from "./busEvents";
@@ -46,7 +46,7 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
             while (true) {
                 signal.throwIfAborted();
 
-                const e = await waitForGuard({ subscr: subscr }, rt.Union(ConfigSendVideoChanged, ConfigReceiveVideoChanged, RegularFunctionsShutdown), signal);
+                const e = await waitForGuard({ subscr: subscr }, rt.Union(ConfigSendVideoChanged, ConfigReceiveVideoChanged, ConfigChanged, RegularFunctionsShutdown), signal);
                 switch (e.type) {
                     case 'ConfigSendVideoChanged':
                         localStorageAccess.videoConfig.send.set(user, e.sendVideo);
@@ -54,6 +54,10 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
 
                     case 'ConfigReceiveVideoChanged':
                         localStorageAccess.videoConfig.receive.set(user, e.receiveVideo);
+                        break;
+
+                    case 'ConfigChanged':
+                        localStorageAccess.videoConfig.others.set(user, e.name, e.checked);
                         break;
 
                     case 'RegularFunctionsShutdown':
@@ -730,24 +734,37 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
         }
 
         async function handleCallClick(callees: string[], signal: AbortSignal): Promise<{ [callee: string]: WithVideo } | null> {
-            // console.log('handleCallClick: user', user, 'callees', callees, 'connections', connections);
+            console.log('handleCallClick: user', user, 'callees', callees, 'connections', connections);
             const newUsers: string[] = [];
+            let ownUserCalled = false;
             for (const callee of callees) {
                 // console.log('for: user', user, 'callee', callee);
                 if (callee === user) {
-                    fireEvent<ChatAddErrorLine>({
-                        type: 'ChatAddErrorLine',
-                        error: "Please, don't call yourself!"
-                    })
+                    ownUserCalled = true;
 
                 } else {
                     newUsers.push(callee);
                 }
             }
 
-            newUsers.sort();
+            if (newUsers.length === 0) {
 
-            if (newUsers.length === 0) return null;
+                if (ownUserCalled) {
+                    fireEvent<ChatAddErrorLine>({
+                        type: 'ChatAddErrorLine',
+                        error: "Please, don't call yourself!"
+                    })
+                } else {
+                    fireEvent<ModalDlg>({
+                        type: 'ModalDlg',
+                        msg: 'Please select users in the user list before you click on the call button.'
+                    });
+    
+                }
+                return null;
+            }
+
+            newUsers.sort();
 
             const videoConfigSend = localStorageAccess.videoConfig.send.get(user);
             const videoConfigReceive = localStorageAccess.videoConfig.receive.get(user);
@@ -1151,26 +1168,38 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                             const e = await waitForGuard({ subscr: subscr }, rt.Union(OkClicked, CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
                                             switch (e.type) {
                                                 case 'OkClicked':
-                                                    while (true) {
-                                                        signal.throwIfAborted();
-                                                        const subscriptionRes = await createPushSubscription();
-                                                        if ('subscription' in subscriptionRes) {
-                                                            const subscription = subscriptionRes.subscription;
-                                                            const error: string | null = await sendPushSubscriptionToServer(subscription);
-                                                            if (error != null) {
-                                                                const tryAgain = await pushError(subscr, error, signal);
+                                                    fireEvent<Busy>({
+                                                        type: 'Busy',
+                                                        comment: 'Subscribing for push notifications ...'
+                                                    });
+                                                    try {
+
+                                                        while (true) {
+                                                            signal.throwIfAborted();
+                                                            const subscriptionRes = await createPushSubscription();
+                                                            if ('subscription' in subscriptionRes) {
+                                                                const subscription = subscriptionRes.subscription;
+                                                                const error: string | null = await sendPushSubscriptionToServer(subscription);
+                                                                if (error != null) {
+                                                                    const tryAgain = await pushError(subscr, error, signal);
+                                                                    if (!tryAgain) {
+                                                                        return null;
+                                                                    }
+                                                                } else {
+                                                                    return subscription;
+                                                                }
+                                                            } else {
+                                                                const tryAgain = await pushError(subscr, subscriptionRes.error, signal);
                                                                 if (!tryAgain) {
                                                                     return null;
                                                                 }
-                                                            } else {
-                                                                return subscription;
-                                                            }
-                                                        } else {
-                                                            const tryAgain = await pushError(subscr, subscriptionRes.error, signal);
-                                                            if (!tryAgain) {
-                                                                return null;
                                                             }
                                                         }
+                                                    } finally {
+                                                        fireEvent<Busy>({
+                                                            type: 'Busy',
+                                                            comment: null
+                                                        });
                                                     }
 
                                                     break;
@@ -1184,76 +1213,89 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                             });
                                         }
                                     }
-
-                                    fireEvent<CallsInterrupt>({
-                                        type: 'CallsInterrupt',
-                                    });
                                     const subscr = eventBus.subscribe();
                                     try {
-                                        const e = await waitForGuard({ bus: eventBus }, rt.Union(CallsInterruptResult, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
-                                        switch (e.type) {
-                                            case 'CallsInterruptResult':
-                                                if (!e.success) {
-                                                    fireEvent<ModalDlg>({
-                                                        type: 'ModalDlg',
-                                                        msg: 'Please hang up your calls, first!'
-                                                    });
-                                                    await waitForGuard({ bus: eventBus }, OkClicked, signal);
-                                                    doPushNotificationsShutdown();
-                                                } else {
-                                                    const pushSubscription = await setupPushNotifications(subscr, signal);
 
-                                                    if (pushSubscription == null) {
-                                                        fireEvent<CallsCont>({
-                                                            type: 'CallsCont',
+                                        const pushSubscription = await setupPushNotifications(subscr, signal);
+
+                                        if (pushSubscription == null) {
+                                            doPushNotificationsShutdown();
+                                        } else {
+                                            fireEvent<CallsInterrupt>({
+                                                type: 'CallsInterrupt',
+                                            });
+
+                                            const e = await waitForGuard({ bus: eventBus }, rt.Union(CallsInterruptResult, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+
+                                            switch (e.type) {
+                                                case 'CallsInterruptResult':
+                                                    if (!e.success) {
+                                                        fireEvent<ModalDlg>({
+                                                            type: 'ModalDlg',
+                                                            msg: 'Please hang up your calls, first!'
                                                         });
+                                                        await waitForGuard({ bus: eventBus }, OkClicked, signal);
                                                         doPushNotificationsShutdown();
                                                     } else {
-                                                        fireEvent<FetchingInterruptedRecursive>({
-                                                            type: 'FetchingInterruptedRecursive',
-                                                            interrupted: true
-                                                        });
-                                                        fireEvent<AwaitPushDlg>({
-                                                            type: 'AwaitPushDlg',
-                                                            props: {
-                                                            }
-                                                        });
-                                                        const e = await waitForGuard({ subscr: subscr }, rt.Union(CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
-                                                        fireEvent<FetchingInterruptedRecursive>({
-                                                            type: 'FetchingInterruptedRecursive',
-                                                            interrupted: false
-                                                        });
-                                                        fireEvent<AwaitPushDlg>({
-                                                            type: 'AwaitPushDlg',
-                                                            props: null
-                                                        });
-                                                        switch (e.type) {
-                                                            case 'RegularFunctionsShutdown':
-                                                                regularFunctionsShutdown = true;
-                                                                break;
-                                                            case 'CancelClicked':
+
+                                                        try {
+                                                            if (pushSubscription == null) {
+                                                                fireEvent<CallsCont>({
+                                                                    type: 'CallsCont',
+                                                                });
                                                                 doPushNotificationsShutdown();
-                                                                // callsCont()
-                                                                fireEvent<CallsCont>({
-                                                                    type: 'CallsCont',
+                                                            } else {
+                                                                fireEvent<FetchingInterruptedRecursive>({
+                                                                    type: 'FetchingInterruptedRecursive',
+                                                                    interrupted: true
                                                                 });
-                                                                break;
-                                                            case 'PushNotificationsShutdown':
-                                                                fireEvent<CallsCont>({
-                                                                    type: 'CallsCont',
+                                                                fireEvent<AwaitPushDlg>({
+                                                                    type: 'AwaitPushDlg',
+                                                                    props: {
+                                                                    }
                                                                 });
-                                                                break;
+                                                                const e = await waitForGuard({ subscr: subscr }, rt.Union(CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                                                fireEvent<FetchingInterruptedRecursive>({
+                                                                    type: 'FetchingInterruptedRecursive',
+                                                                    interrupted: false
+                                                                });
+                                                                fireEvent<AwaitPushDlg>({
+                                                                    type: 'AwaitPushDlg',
+                                                                    props: null
+                                                                });
+                                                                switch (e.type) {
+                                                                    case 'RegularFunctionsShutdown':
+                                                                        regularFunctionsShutdown = true;
+                                                                        break;
+                                                                    case 'CancelClicked':
+                                                                        doPushNotificationsShutdown();
+                                                                        // callsCont()
+                                                                        fireEvent<CallsCont>({
+                                                                            type: 'CallsCont',
+                                                                        });
+                                                                        break;
+                                                                    case 'PushNotificationsShutdown':
+                                                                        fireEvent<CallsCont>({
+                                                                            type: 'CallsCont',
+                                                                        });
+                                                                        break;
+                                                                }
+
+                                                            }
+
+
+                                                        } finally {
+                                                            pushSubscription?.unsubscribe();
                                                         }
-
                                                     }
+                                                    break;
 
-                                                }
-                                                break;
-
-                                            default:
-                                                doPushNotificationsShutdown();
-                                                break;
+                                                default:
+                                                    doPushNotificationsShutdown();
+                                                    break;
+                                            }
                                         }
+
 
                                     } finally {
                                         subscr.unsubscribe();

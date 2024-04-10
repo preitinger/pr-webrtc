@@ -1,5 +1,4 @@
-//                         localStorage.setItem(`${user}.videoConfigSend`, e.sendVideo);
-
+import * as rt from "runtypes"
 import { VideoConfigValue } from "./busEvents";
 
 function videoConfigKey(user: string, sendOrReceive: 'send' | 'receive') {
@@ -17,9 +16,28 @@ function videoConfigSetGet(sendOrReceive: 'send' | 'receive') {
         }
     }
 }
+function videoConfigOthersKey(user: string, name: string) {
+    return `${user}.videoConfig.others.${name}`;
+}
+const videoConfigOthers = {
+    get: (user: string, name: string, defaultChecked: boolean): boolean => {
+        const s = localStorage.getItem(videoConfigOthersKey(user, name))
+        if (s == null) return defaultChecked;
+        try {
+            return rt.Boolean.check(JSON.parse(s));
+        } catch (reason) {
+            console.error(`Error when parsing ${s} as JSON with a boolean`, reason, `Returning the default value ${defaultChecked}`)
+            return defaultChecked;
+        }
+    },
+    set: (user: string, name: string, checked: boolean): void => {
+        localStorage.setItem(videoConfigOthersKey(user, name), JSON.stringify(checked));
+    }
+}
 export const videoConfig = {
     send: videoConfigSetGet('send'),
-    receive: videoConfigSetGet('receive')
+    receive: videoConfigSetGet('receive'),
+    others: videoConfigOthers
 }
 
 function lastVideoSettingsKey(user: string, remoteUser: string, sendOrReceive: 'send' | 'receive') {

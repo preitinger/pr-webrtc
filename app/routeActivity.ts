@@ -416,12 +416,15 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
         })
         const sendVideo = localStorageAccess.videoConfig.send.get(user)
         const receiveVideo = localStorageAccess.videoConfig.receive.get(user)
+        const ringOnCall = localStorageAccess.videoConfig.others.get(user, 'ringOnCall', true);
         const fitToDisplay = localStorageAccess.fitToDisplay.get(user)
         fireEvent<RegularPage>({
             type: 'RegularPage',
             props: {
                 sendVideo: sendVideo,
                 receiveVideo: receiveVideo,
+                ringOnCall: ringOnCall,
+                debugMessages: false,
                 fitToDisplay: fitToDisplay
             }
         })
@@ -1044,6 +1047,8 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
             props: {
                 sendVideo: 'individually',
                 receiveVideo: 'always',
+                ringOnCall: false,
+                debugMessages: false,
                 fitToDisplay: false
             }
         })
@@ -1202,6 +1207,14 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                 console.error(reason);
             }
         });
+
+        {
+            const pushManager = (await navigator.serviceWorker.ready).pushManager;
+            let subscription = await pushManager.getSubscription()
+            if (subscription != null) {
+                subscription.unsubscribe(); // be nice and delete old push subscriptions ;-)
+            }
+        }
 
         const callee = sessionStorage['callee'];
         const accept = sessionStorage['accept'];

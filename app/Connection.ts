@@ -4,7 +4,7 @@ import EventBus, { Subscription, waitForGuard } from "./_lib/EventBus";
 import chainedAbortController from "./_lib/pr-client-utils/chainedAbortController";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
 import { WithVideo } from "./_lib/video/DoWebRTCStuff";
-import { AcceptClicked, ChatAddHintLine, EnqueueCall, ReceiveVideoChanged, ReceivedCallDlg, ReceivedCallProps, RegularFunctionsShutdown, HangUpClicked, RemoteMediaStream, RemoteMsg, SendVideoChanged, SetConnectionComp, HangUp, RemoteHangUp, ModalDlg } from "./busEvents";
+import { AcceptClicked, ChatAddHintLine, EnqueueCall, ReceiveVideoChanged, ReceivedCallDlg, ReceivedCallProps, RegularFunctionsShutdown, HangUpClicked, RemoteMediaStream, RemoteMsg, SendVideoChanged, SetConnectionComp, HangUp, RemoteHangUp, ModalDlg, ChatAddDbgLine } from "./busEvents";
 
 import * as localStorageAccess from './localStorageAccess'
 
@@ -1023,9 +1023,9 @@ export class Connection {
     }
 
     private dbg(msg: string) {
-        this.fireEvent<ChatAddHintLine>({
-            type: 'ChatAddHintLine',
-            hint: `${this.remoteUser}\n${msg}`
+        this.fireEvent<ChatAddDbgLine>({
+            type: 'ChatAddDbgLine',
+            msg: `${this.remoteUser}\n${msg}`
         })
     }
 
@@ -1941,9 +1941,9 @@ export class ConnectionOld {
     }
 
     private st(s: State) {
-        this.fireEvent<ChatAddHintLine>({
-            type: 'ChatAddHintLine',
-            hint: `${this.remoteUser}: ${JSON.stringify(this.st1)} -> ${JSON.stringify(s)}`
+        this.fireEvent<ChatAddDbgLine>({
+            type: 'ChatAddDbgLine',
+            msg: `${this.remoteUser}: ${JSON.stringify(this.st1)} -> ${JSON.stringify(s)}`
         });
         this.st1 = s;
     }
@@ -1964,9 +1964,9 @@ export class ConnectionOld {
     }
 
     private dbg(msg: string) {
-        this.fireEvent<ChatAddHintLine>({
-            type: 'ChatAddHintLine',
-            hint: `${this.remoteUser}\n[${JSON.stringify(this.st1)}]\n${msg}`
+        this.fireEvent<ChatAddDbgLine>({
+            type: 'ChatAddDbgLine',
+            msg: `${this.remoteUser}\n[${JSON.stringify(this.st1)}]\n${msg}`
         })
     }
 

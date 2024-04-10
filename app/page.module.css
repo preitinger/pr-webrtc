@@ -155,6 +155,7 @@
 }
 
 .dlg {
+    position: relative;
     border-radius: 1rem;
     border: 1px solid black;
     background: lightgray;
@@ -290,10 +291,10 @@
     justify-content: center;
     align-items: center;
 }
-.button-all:hover, .button-users:hover, .button-config:hover, .button-chat:hover, .button-video:hover, .logout:hover {
+.button-all:hover, .button-users:hover, .button-config:hover, .button-chat:hover, .button-video:hover, .buttonVideoMenu, .logout:hover {
     background-color:blanchedalmond;
 }
-.button-all, .button-users, .button-config, .button-chat, .button-video, .logout {
+.button-all, .button-users, .button-config, .button-chat, .button-video, .buttonVideoMenu, .logout {
     background-color: transparent;
     background-position: center;
     background-repeat: no-repeat;
@@ -334,6 +335,50 @@
 .gap {
     flex-grow: 1000;
 }
+.buttonVideoMenu {
+    background-image: url('/icons/menu-bar_8037816.png');
+}
 .logout {
     background-image: url('/icons/power_12472615.png');
+}
+.transientMsg, .transientMsgAnimate {
+    z-index: 200;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: lightgoldenrodyellow;
+    border: 1px solid black;
+    color: black;
+    padding: 1rem;
+    border-radius: 1rem;
+    opacity:0.1;
+}
+.transientMsgAnimate {
+    opacity:1;
+    transition: opacity 1s;
+}
+.transientMsgFadeout {
+    opacity: 0.1;
+    transition: opacity 1s;
+}
+.closeButton {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    /* padding: 0.5rem; */
+    padding-top: 2px;
+    padding-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    width: 40px;
+    height: 40px;
+    vertical-align: middle;
+}
+.imgAttributes {
+    margin: 1rem;
+}
+.imgAttributes td {
+    padding-top: 1rem;
+    padding-right: 1rem;
 }

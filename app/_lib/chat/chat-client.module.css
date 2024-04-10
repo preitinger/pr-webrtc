@@ -25,6 +25,7 @@
     padding: 1rem;
     height: calc(70vh - 7rem);
     overflow-y: scroll;
+    z-index: 1000;
 }
 
 .chatLinesSmall {
