@@ -57,7 +57,16 @@ export default function RootLayout({
 }) {
     return (
         <html lang="en">
-            <body className={inter.className}>{children}</body>
+            <body className={inter.className}>
+                <noscript>
+                    <div className='noscript'>
+                        <div className='dlg'>
+                            <strong>Please activate Javascript in your browser to use this Web App.</strong>
+                        </div>
+                    </div>
+                </noscript>
+                {children}
+            </body>
         </html>
     )
 }

@@ -356,11 +356,11 @@
 }
 .transientMsgAnimate {
     opacity:1;
-    transition: opacity 1s;
+    transition: opacity 0.4s;
 }
 .transientMsgFadeout {
     opacity: 0.1;
-    transition: opacity 1s;
+    transition: opacity 0.4s;
 }
 .closeButton {
     position: absolute;

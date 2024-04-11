@@ -1166,6 +1166,10 @@ export default async function regularFunctions(eventBusKey: string, accumulatedF
                                         try {
 
                                             const e = await waitForGuard({ subscr: subscr }, rt.Union(OkClicked, CancelClicked, PushNotificationsShutdown, RegularFunctionsShutdown), signal);
+                                            fireEvent<SetupPushDlg>({
+                                                type: 'SetupPushDlg',
+                                                props: null
+                                            });
                                             switch (e.type) {
                                                 case 'OkClicked':
                                                     fireEvent<Busy>({

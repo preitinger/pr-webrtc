@@ -8,7 +8,7 @@ import { getEventBus, useEventBus } from "./useEventBus";
 import styles from './page.module.css'
 import Image from "next/image";
 import { AccumulatedFetching } from "./_lib/user-management-client/AccumulatedFetching";
-import { StartPageProps, RegisterClicked, LoginClicked, LoginOrRegisterDlgProps, LoginOrRegisterOk, CancelClicked, StartPage, LoginDlg, Busy, FetchError, TryAgainClicked, RegisterDlg, RegularPage, RegularPageProps, CallClicked/* , SetCallButtonText */, SetFetchErrorState, ChatStart, ChatStop, AuthFailed, AuthFailedDlg, EmptyPropsOrNull, CloseClicked, UseHereClicked, ChatAddErrorLine, FetchingSetInterrupted, LogoutClicked, WaitForPushClicked, SetupPushDlg, OkClicked, SetupPushProps, AwaitPushDlg, DecideIfWithVideoDlg, DecideIfWithVideoProps, SendVideoChanged, ReceiveVideoChanged, VideoConfigValue, ConfigSendVideoChanged, ConfigReceiveVideoChanged, SetCallActive, ModalDlg, VideoDataSettingsClicked, LocalMediaStream, HandlingFetchError, CameraTestClicked, SetCameraTestButton, ChatAddHintLine, ConnectionProps, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, ReceivedCallProps, AcceptClicked, HangUpClicked, HangUpProps, HangUpDlg, HangUp, ConfigChanged, ChatAddDbgLine } from "./busEvents";
+import { StartPageProps, RegisterClicked, LoginClicked, LoginOrRegisterDlgProps, LoginOrRegisterOk, CancelClicked, StartPage, LoginDlg, Busy, FetchError, TryAgainClicked, RegisterDlg, RegularPage, RegularPageProps, CallClicked/* , SetCallButtonText */, SetFetchErrorState, ChatStart, ChatStop, AuthFailed, AuthFailedDlg, EmptyPropsOrNull, CloseClicked, UseHereClicked, ChatAddErrorLine, FetchingSetInterrupted, LogoutClicked, WaitForPushClicked, SetupPushDlg, OkClicked, SetupPushProps, AwaitPushDlg, DecideIfWithVideoDlg, DecideIfWithVideoProps, SendVideoChanged, ReceiveVideoChanged, VideoConfigValue, ConfigSendVideoChanged, ConfigReceiveVideoChanged, SetCallActive, ModalDlg, VideoDataSettingsClicked, LocalMediaStream, HandlingFetchError, CameraTestClicked, SetCameraTestButton, ChatAddHintLine, ConnectionProps, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, ReceivedCallProps, AcceptClicked, HangUpClicked, HangUpProps, HangUpDlg, HangUp, ConfigChanged, ChatAddDbgLine, SetPushError } from "./busEvents";
 import { ChatPanelComp, MultiSelectChatUserListComp, useMultiSelectChat } from "./_lib/chat/chat-client";
 import assert from "assert";
 import timeout from "./_lib/pr-timeout/pr-timeout";
@@ -858,7 +858,8 @@ export default function Page() {
                 const MyEvents = rt.Union(StartPage, LoginDlg, RegisterDlg, Busy, RegularPage, ChatStart, ChatStop, /* SetCallButtonText, */
                     SetCameraTestButton,
                     SetFetchErrorState, AuthFailedDlg, ChatAddErrorLine, ChatAddHintLine, ChatAddDbgLine, FetchingSetInterrupted, SetupPushDlg, AwaitPushDlg, DecideIfWithVideoDlg,
-                    SetCallActive, ModalDlg, LocalMediaStream, HandlingFetchError, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, HangUpDlg)
+                    SetCallActive, ModalDlg, LocalMediaStream, HandlingFetchError, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, HangUpDlg,
+                    SetPushError)
                 // setupPushProps, awaitPushProps, decideIfWithVideoProps, fetchError, receivedCallProps
                 type MyEvents = rt.Static<typeof MyEvents>
 
@@ -1010,6 +1011,12 @@ export default function Page() {
                             case 'HangUpDlg':
                                 setHangUpProps(e.props);
                                 break;
+
+                            case 'SetPushError':
+                                setSetupPushProps({
+                                    error: e.error
+                                })
+                                break;
                         }
                     }
                 }
@@ -1074,7 +1081,7 @@ export default function Page() {
             const to2 = setTimeout(() => {
                 setTransientMsg(null);
                 setTransientMsgFadeout(false);
-            }, 3000)
+            }, 2400)
 
             return () => {
                 clearTimeout(to2);
@@ -1175,7 +1182,7 @@ export default function Page() {
         switch (name) {
             case 'debugMessages':
                 debugMessages.current = true;
-                // no break
+            // no break
             case 'ringOnCall':
                 setRegularPageProps(d => d == null ? d : ({
                     ...d,
@@ -1315,12 +1322,6 @@ export default function Page() {
                                         type: 'WaitForPushClicked',
                                     })
                                     }>Wait for push notification ...</button>
-                                </div>
-                            }
-                            {
-                                busyVisible && busyComment != null && <div>
-                                    <h1>Busy ...</h1>
-                                    <p>{busyComment}</p>
                                 </div>
                             }
                             {
@@ -1501,10 +1502,6 @@ fetchErrorDuringLogin != null &&
 <ShowFetchErrorDuringLoginComp error={fetchErrorDuringLogin} />
 } */}
                     <main className={styles.main}>
-                        {busyVisible && busyComment != null && <div>
-                            <h1>Busy ...</h1>
-                            <p>{busyComment}</p>
-                        </div>}
                         {authFailedProps != null && <AuthFailedComp {...authFailedProps} onClose={() =>
                             fireEvent<CloseClicked>({
                                 type: 'CloseClicked',
@@ -1624,6 +1621,16 @@ fetchErrorDuringLogin != null &&
                     audioRef.current?.play();
                 }
             }} */ />
+            {/* {
+                busyVisible && busyComment != null && <div>
+                    <h1>Busy ...</h1>
+                    <p>{busyComment}</p>
+                </div>
+            } */}
+            {
+                busyVisible && busyComment != null &&
+                <TransientMsg msg={busyComment} fadeOut={false}/>
+            }
 
         </>
     )
