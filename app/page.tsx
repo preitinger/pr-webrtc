@@ -37,6 +37,7 @@ function ImageAttributes() {
         { url: '/icons/speech-bubble_1078011.png', link: <a href="https://www.freepik.com/icon/speech-bubble_1078011">Icon by Freepik</a> },
         { url: '/accept-call-64x64.png', link: <a href="https://www.freepik.com/icon/phone-ringing_8735279#fromView=search&term=accept+call&track=ais&page=1&position=14">Icon by Maan Icons</a> },
         { url: '/call-missed-64x64.png', link: <a href="https://www.freepik.com/icon/call-missed_8735616#fromView=search&term=reject+call&track=ais&page=1&position=19&uuid=71bd4103-45f4-4732-ac6d-1250770d3b4e">Icon by Maan Icons</a> },
+        { url: '/icons/video-calling_7502562.png', link: <a href="https://www.freepik.com/icon/video-calling_7502562#fromView=search&page=1&position=30&uuid=336edfb6-85fa-477a-9735-61db30653aa8">Icon by Iconic Panda</a> },
     ]
     return (
         <div className={styles.imgAttributes}>
@@ -1629,7 +1630,7 @@ fetchErrorDuringLogin != null &&
             } */}
             {
                 busyVisible && busyComment != null &&
-                <TransientMsg msg={busyComment} fadeOut={false}/>
+                <TransientMsg msg={busyComment} fadeOut={false} />
             }
 
         </>
