@@ -1,6 +1,6 @@
 'use client'
 
-import { ChangeEvent, KeyboardEvent, KeyboardEventHandler, PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, Dispatch, KeyboardEvent, KeyboardEventHandler, PropsWithChildren, SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import routeActivity from "./routeActivity";
 import FixedAbortController from "./_lib/pr-client-utils/FixedAbortController";
 import * as rt from "runtypes";
@@ -193,10 +193,19 @@ function RegisterDlgComp(props: LoginOrRegisterDlgProps) {
     )
 }
 
-function standardCatching(prom: Promise<unknown>) {
+function standardCatching(prom: Promise<unknown>, setErrorText: Dispatch<SetStateAction<string>>) {
     prom.catch((reason: any) => {
         if (reason.name !== 'AbortError') {
             console.error(reason);
+            if (typeof (reason.toString) === 'function') {
+                setErrorText(reason.toString());
+                if ('stack' in reason) {
+                    console.log('typeof stack', typeof(reason.stack));
+                    setErrorText(reason.stack);
+                }
+            } else {
+                setErrorText(JSON.stringify(reason));
+            }
         } else {
             // console.log('silently ignored', reason);
         }
@@ -815,6 +824,7 @@ export default function Page() {
     const [videoMenu, setVideoMenu] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const debugMessages = useRef<boolean>(false);
+    const [errorText, setErrorText] = useState<string>('');
 
     function nyi() {
         console.error('nyi');
@@ -832,247 +842,253 @@ export default function Page() {
 
     useEffect(() => {
         // console.log('starting main effect with routeActivity()')
-        const abortController = new FixedAbortController();
-        const eventBus = getEventBus(eventBusKey);
-        const throwIfAborted = () => abortController.signal.throwIfAborted();
-        const accumulatedFetching = new AccumulatedFetching(
-            '/api/webRTC',
-            {
-                fetchError: (error) => {
-                    fireEvent<FetchError>({
-                        type: 'FetchError',
-                        error: error
-                    })
+        try {
+            const abortController = new FixedAbortController();
+            const eventBus = getEventBus(eventBusKey);
+            const throwIfAborted = () => abortController.signal.throwIfAborted();
+            const accumulatedFetching = new AccumulatedFetching(
+                '/api/webRTC',
+                {
+                    fetchError: (error) => {
+                        fireEvent<FetchError>({
+                            type: 'FetchError',
+                            error: error
+                        })
+                    }
+                },
+                abortController
+            );
+
+
+            const handleEvents = async () => {
+                function mark(option: ViewOption) {
+                    setTopMenuItemMarked(option, true);
                 }
-            },
-            abortController
-        );
+                const subscr = eventBus.subscribe();
+                try {
+                    // TODO add ReceivedCallDlg and ReceivedCallComp and so on
+                    const MyEvents = rt.Union(StartPage, LoginDlg, RegisterDlg, Busy, RegularPage, ChatStart, ChatStop, /* SetCallButtonText, */
+                        SetCameraTestButton,
+                        SetFetchErrorState, AuthFailedDlg, ChatAddErrorLine, ChatAddHintLine, ChatAddDbgLine, FetchingSetInterrupted, SetupPushDlg, AwaitPushDlg, DecideIfWithVideoDlg,
+                        SetCallActive, ModalDlg, LocalMediaStream, HandlingFetchError, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, HangUpDlg,
+                        SetPushError)
+                    // setupPushProps, awaitPushProps, decideIfWithVideoProps, fetchError, receivedCallProps
+                    type MyEvents = rt.Static<typeof MyEvents>
 
 
-        async function handleEvents() {
-            function mark(option: ViewOption) {
-                setTopMenuItemMarked(option, true);
-            }
-            const subscr = eventBus.subscribe();
-            try {
-                // TODO add ReceivedCallDlg and ReceivedCallComp and so on
-                const MyEvents = rt.Union(StartPage, LoginDlg, RegisterDlg, Busy, RegularPage, ChatStart, ChatStop, /* SetCallButtonText, */
-                    SetCameraTestButton,
-                    SetFetchErrorState, AuthFailedDlg, ChatAddErrorLine, ChatAddHintLine, ChatAddDbgLine, FetchingSetInterrupted, SetupPushDlg, AwaitPushDlg, DecideIfWithVideoDlg,
-                    SetCallActive, ModalDlg, LocalMediaStream, HandlingFetchError, SetConnectionComp, RemoteMediaStream, ReceivedCallDlg, HangUpDlg,
-                    SetPushError)
-                // setupPushProps, awaitPushProps, decideIfWithVideoProps, fetchError, receivedCallProps
-                type MyEvents = rt.Static<typeof MyEvents>
-
-
-                while (true) {
-                    throwIfAborted();
-                    const e: any = await subscr.nextEvent();
-                    throwIfAborted();
-                    // console.log('handleEvents got', ('type' in e ? e.type : ''), e);
-                    if (MyEvents.guard(e)) {
-                        switch (e.type) {
-                            case 'StartPage':
-                                setStartPageProps(e.props);
-                                break;
-                            case 'LoginDlg':
-                                // console.log('setting loginDlgProps to ', e.props);
-                                setLoginDlgProps(e.props);
-                                mark('users');
-                                break;
-                            case 'RegisterDlg':
-                                setRegisterDlgProps(e.props);
-                                break;
-                            case 'Busy':
-                                setBusy(e.comment != null);
-                                if (e.comment != null) setBusyComment(e.comment);
-                                break;
-                            // case 'ShowFetchErrorDuringLogin':
-                            //     setFetchErrorDuringLogin(e.error);
-                            //     break;
-                            case 'RegularPage':
-                                setRegularPageProps(e.props);
-                                break;
-                            // case 'SetCallButtonText':
-                            //     setCallButtonText(e.text);
-                            //     break;
-                            case 'SetCameraTestButton':
-                                setCameraTestButtonText(e.label)
-                                break;
-                            case 'HandlingFetchError':
-                                // console.log('HandlingFetchError', e.error);
-                                setFetchError(e.error);
-                                break;
-                            case 'ChatStart':
-                                chatOnStart(accumulatedFetching, e.loginResultData, () => {
-                                    fireEvent<AuthFailed>({
-                                        type: 'AuthFailed',
+                    while (true) {
+                        throwIfAborted();
+                        const e: any = await subscr.nextEvent();
+                        throwIfAborted();
+                        // console.log('handleEvents got', ('type' in e ? e.type : ''), e);
+                        if (MyEvents.guard(e)) {
+                            switch (e.type) {
+                                case 'StartPage':
+                                    setStartPageProps(e.props);
+                                    break;
+                                case 'LoginDlg':
+                                    // console.log('setting loginDlgProps to ', e.props);
+                                    setLoginDlgProps(e.props);
+                                    mark('users');
+                                    break;
+                                case 'RegisterDlg':
+                                    setRegisterDlgProps(e.props);
+                                    break;
+                                case 'Busy':
+                                    setBusy(e.comment != null);
+                                    if (e.comment != null) setBusyComment(e.comment);
+                                    break;
+                                // case 'ShowFetchErrorDuringLogin':
+                                //     setFetchErrorDuringLogin(e.error);
+                                //     break;
+                                case 'RegularPage':
+                                    setRegularPageProps(e.props);
+                                    break;
+                                // case 'SetCallButtonText':
+                                //     setCallButtonText(e.text);
+                                //     break;
+                                case 'SetCameraTestButton':
+                                    setCameraTestButtonText(e.label)
+                                    break;
+                                case 'HandlingFetchError':
+                                    // console.log('HandlingFetchError', e.error);
+                                    setFetchError(e.error);
+                                    break;
+                                case 'ChatStart':
+                                    chatOnStart(accumulatedFetching, e.loginResultData, () => {
+                                        fireEvent<AuthFailed>({
+                                            type: 'AuthFailed',
+                                        })
                                     })
-                                })
-                                break;
-                            case 'AuthFailedDlg':
-                                setAuthFailedProps(e.props);
-                                mark('users');
-                                break;
-                            case 'ChatAddErrorLine':
-                                chatAddErrorLine(e.error);
-                                setErrorsAndHints(d => ([...d, {
-                                    type: 'Error',
-                                    error: e.error
-                                }]))
-                                mark('chat');
-                                setTransientMsg(e.error);
-                                break;
-                            case 'ChatAddHintLine':
-                                chatAddErrorLine(e.hint);
-                                setErrorsAndHints(d => ([...d,
-                                {
-                                    type: 'Hint',
-                                    hint: e.hint
-                                }]))
-                                mark('chat');
-                                setTransientMsg(e.hint);
-                                break;
-                            case 'ChatAddDbgLine':
-                                if (debugMessages.current) {
-                                    chatAddErrorLine(e.msg);
-                                }
-                                mark('chat');
-                                break;
-                            case 'FetchingSetInterrupted':
-                                accumulatedFetching.setInterrupted(e.interrupted);
-                                break;
-                            case 'ChatStop':
-                                chatOnStop();
-                                break;
-                            case 'SetupPushDlg':
-                                setSetupPushProps(e.props);
-                                break;
-                            case 'AwaitPushDlg':
-                                setAwaitPushProps(e.props);
-                                break;
-                            case 'DecideIfWithVideoDlg':
-                                setDecideIfWithVideoProps(e.props);
-                                break;
-                            case 'SetCallActive':
-                                setCallActive(e.active);
-                                break;
-                            case 'ModalDlg':
-                                setModalMsg(e.msg)
-                                break;
-                            case 'LocalMediaStream':
-                                setLocalMediaStream(e.stream as MediaStream | null);
-                                mark('video');
-                                break;
-                            case 'SetConnectionComp':
-                                setConnectionsProps(d => {
-                                    ConnectionsProps.check(d);
-                                    const newConnectionsProps: ConnectionsProps = {
-                                        connections: {}
+                                    break;
+                                case 'AuthFailedDlg':
+                                    setAuthFailedProps(e.props);
+                                    mark('users');
+                                    break;
+                                case 'ChatAddErrorLine':
+                                    chatAddErrorLine(e.error);
+                                    setErrorsAndHints(d => ([...d, {
+                                        type: 'Error',
+                                        error: e.error
+                                    }]))
+                                    mark('chat');
+                                    setTransientMsg(e.error);
+                                    break;
+                                case 'ChatAddHintLine':
+                                    chatAddErrorLine(e.hint);
+                                    setErrorsAndHints(d => ([...d,
+                                    {
+                                        type: 'Hint',
+                                        hint: e.hint
+                                    }]))
+                                    mark('chat');
+                                    setTransientMsg(e.hint);
+                                    break;
+                                case 'ChatAddDbgLine':
+                                    if (debugMessages.current) {
+                                        chatAddErrorLine(e.msg);
                                     }
-                                    for (const key in d.connections) {
-                                        if (key !== e.remoteUser) {
-                                            newConnectionsProps.connections[key] = d.connections[key]
+                                    mark('chat');
+                                    break;
+                                case 'FetchingSetInterrupted':
+                                    accumulatedFetching.setInterrupted(e.interrupted);
+                                    break;
+                                case 'ChatStop':
+                                    chatOnStop();
+                                    break;
+                                case 'SetupPushDlg':
+                                    setSetupPushProps(e.props);
+                                    break;
+                                case 'AwaitPushDlg':
+                                    setAwaitPushProps(e.props);
+                                    break;
+                                case 'DecideIfWithVideoDlg':
+                                    setDecideIfWithVideoProps(e.props);
+                                    break;
+                                case 'SetCallActive':
+                                    setCallActive(e.active);
+                                    break;
+                                case 'ModalDlg':
+                                    setModalMsg(e.msg)
+                                    break;
+                                case 'LocalMediaStream':
+                                    setLocalMediaStream(e.stream as MediaStream | null);
+                                    mark('video');
+                                    break;
+                                case 'SetConnectionComp':
+                                    setConnectionsProps(d => {
+                                        ConnectionsProps.check(d);
+                                        const newConnectionsProps: ConnectionsProps = {
+                                            connections: {}
                                         }
-                                    }
-
-                                    if (e.props != null) {
-                                        newConnectionsProps.connections[e.remoteUser] = e.props;
-                                    }
-                                    return ConnectionsProps.check(newConnectionsProps);
-                                })
-                                mark('video');
-                                break;
-                            case 'RemoteMediaStream':
-                                setConnectionsProps(d => {
-                                    ConnectionsProps.check(d);
-                                    assert(e.remoteUser in d.connections);
-                                    const res = {
-                                        ...d,
-                                        connections: {
-                                            ...d.connections,
-                                            [e.remoteUser]: {
-                                                ...d.connections[e.remoteUser],
-                                                stream: e.stream
+                                        for (const key in d.connections) {
+                                            if (key !== e.remoteUser) {
+                                                newConnectionsProps.connections[key] = d.connections[key]
                                             }
                                         }
+
+                                        if (e.props != null) {
+                                            newConnectionsProps.connections[e.remoteUser] = e.props;
+                                        }
+                                        return ConnectionsProps.check(newConnectionsProps);
+                                    })
+                                    mark('video');
+                                    break;
+                                case 'RemoteMediaStream':
+                                    setConnectionsProps(d => {
+                                        ConnectionsProps.check(d);
+                                        assert(e.remoteUser in d.connections);
+                                        const res = {
+                                            ...d,
+                                            connections: {
+                                                ...d.connections,
+                                                [e.remoteUser]: {
+                                                    ...d.connections[e.remoteUser],
+                                                    stream: e.stream
+                                                }
+                                            }
+                                        }
+                                        return ConnectionsProps.check(res)
+
+                                    })
+                                    mark('video');
+
+                                    break;
+                                case 'ReceivedCallDlg':
+                                    setReceivedCallProps(e.props);
+                                    if (e.props != null) {
+                                        mark('users');
                                     }
-                                    return ConnectionsProps.check(res)
+                                    break;
+                                case 'HangUpDlg':
+                                    setHangUpProps(e.props);
+                                    break;
 
-                                })
-                                mark('video');
-
-                                break;
-                            case 'ReceivedCallDlg':
-                                setReceivedCallProps(e.props);
-                                if (e.props != null) {
-                                    mark('users');
-                                }
-                                break;
-                            case 'HangUpDlg':
-                                setHangUpProps(e.props);
-                                break;
-
-                            case 'SetPushError':
-                                setSetupPushProps({
-                                    error: e.error
-                                })
-                                break;
+                                case 'SetPushError':
+                                    setSetupPushProps({
+                                        error: e.error
+                                    })
+                                    break;
+                            }
                         }
                     }
+                } finally {
+                    subscr.unsubscribe();
                 }
-            } finally {
-                subscr.unsubscribe();
             }
-        }
 
-        try {
-            standardCatching(handleEvents());
-            standardCatching(routeActivity(chatId, abortController.signal, eventBusKey, accumulatedFetching).catch(reason => {
-                // console.log('caught directly', reason);
-            }));
-
-
-            // // TODO begin repetitive test of routeActivity for memory leaks
-            // {
-            //     const runTest = async () => {
-            //         for (let i = 0; i < 10; ++i) {
-            //             console.warn('runTest', i);
-            //             const c = new FixedAbortController();
-            //             const routeActivityProm = routeActivity(chatId, c.signal, eventBusKey, accumulatedFetching);
-            //             await timeout(10, c.signal);
-            //             c.abort();
-            //             console.log('after abort')
-            //             try {
-            //                 await routeActivityProm;
-            //             } catch (reason) {
-            //                 console.error('caught in routeActivityProm of runTest');
-            //             }
-            //         }
-
-            //     }
-
-            //     runTest();
-            // }
-            // // TODO end repetitive test of routeActivity for memory leaks
-        } catch (reason: any) {
-            // console.log('caught in page mount effect', reason);
-            if (reason.name !== 'AbortError') {
-                console.error(reason);
-            }
-        }
-
-        return () => {
             try {
-                // console.log('before abortController.abort(): signal', abortController.signal)
-                abortController.abort();
-                // console.log('after abortController.abort()')
+                standardCatching(handleEvents(), setErrorText);
+                standardCatching(routeActivity(chatId, abortController.signal, eventBusKey, accumulatedFetching), setErrorText);
 
-            } catch (reason) {
-                console.error('caught in abort effect', reason);
+
+                // // TODO begin repetitive test of routeActivity for memory leaks
+                // {
+                //     const runTest = async () => {
+                //         for (let i = 0; i < 10; ++i) {
+                //             console.warn('runTest', i);
+                //             const c = new FixedAbortController();
+                //             const routeActivityProm = routeActivity(chatId, c.signal, eventBusKey, accumulatedFetching);
+                //             await timeout(10, c.signal);
+                //             c.abort();
+                //             console.log('after abort')
+                //             try {
+                //                 await routeActivityProm;
+                //             } catch (reason) {
+                //                 console.error('caught in routeActivityProm of runTest');
+                //             }
+                //         }
+
+                //     }
+
+                //     runTest();
+                // }
+                // // TODO end repetitive test of routeActivity for memory leaks
+            } catch (reason: any) {
+                // console.log('caught in page mount effect', reason);
+                if (reason.name !== 'AbortError') {
+                    console.error(reason);
+                }
             }
+
+            return () => {
+                try {
+                    // console.log('before abortController.abort(): signal', abortController.signal)
+                    abortController.abort();
+                    // console.log('after abortController.abort()')
+
+                } catch (reason) {
+                    console.error('caught in abort effect', reason);
+                }
+            }
+        } catch (reason) {
+            showError(JSON.stringify(reason));
         }
     }, [chatAddErrorLine, chatOnStart, chatOnStop, setBusy])
+
+    function showError(s: string) {
+        setErrorText(old => old + '\n' + s);
+    }
 
     useEffect(() => {
         if (transientMsg != null) {
@@ -1633,6 +1649,8 @@ fetchErrorDuringLogin != null &&
                 <TransientMsg msg={busyComment} fadeOut={false} />
             }
 
+            {errorText != '' && 
+            <textarea className={styles.errorText} value={errorText} />}
         </>
     )
 }

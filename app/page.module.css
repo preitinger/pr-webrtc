@@ -382,3 +382,7 @@
     padding-top: 1rem;
     padding-right: 1rem;
 }
+.errorText {
+    width: 95vw;
+    height: 800px;
+}
