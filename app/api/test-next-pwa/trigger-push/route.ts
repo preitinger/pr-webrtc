@@ -1,4 +1,4 @@
-import { sendPushMessage } from "@/app/_lib/pr-push-api-server/pr-push-api-server";
+// import { sendPushMessage } from "@/app/_lib/pr-push-api-server/pr-push-api-server";
 import { TriggerPushReq, TriggerPushResp } from "@/app/_lib/test-next-pwa";
 import { SubscriptionDoc } from "@/app/_lib/test-next-pwa-server";
 import { apiPOST } from "@/app/_lib/user-management-server/apiRoutesForServer";
@@ -20,9 +20,9 @@ async function executeTriggerPush(req: TriggerPushReq): Promise<ApiResp<TriggerP
         }
     }
 
-    sendPushMessage(JSON.parse(res.stringifiedSubscription), {
-        test: 1
-    })
+    // sendPushMessage(JSON.parse(res.stringifiedSubscription), {
+    //     test: 1
+    // })
 
     return {
         type: 'success'

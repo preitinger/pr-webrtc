@@ -1207,17 +1207,22 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                 console.error(reason);
             }
         });
+        console.log('nach manageFetching');
 
         {
-            const pushManager = (await navigator.serviceWorker.ready).pushManager;
-            let subscription = await pushManager.getSubscription()
-            if (subscription != null) {
-                subscription.unsubscribe(); // be nice and delete old push subscriptions ;-)
-            }
+            console.warn('pushManager removed')
+            // console.log('await pushManager');
+            // const pushManager = (await navigator.serviceWorker.ready).pushManager;
+            // console.log('awaited pushManager');
+            // let subscription = await pushManager.getSubscription()
+            // if (subscription != null) {
+            //     subscription.unsubscribe(); // be nice and delete old push subscriptions ;-)
+            // }
         }
 
         const callee = sessionStorage['callee'];
         const accept = sessionStorage['accept'];
+        console.log('callee', callee, 'accept', accept)
         if (callee != null || accept != null || (user != null && passwd != null)) {
             if (user == null) user = localStorage['user'];
             if (passwd == null) passwd = localStorage['passwd'];
