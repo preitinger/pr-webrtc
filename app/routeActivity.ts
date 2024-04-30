@@ -1207,7 +1207,6 @@ export default async function routeActivity(chatId: string, routeActivitySignal:
                 console.error(reason);
             }
         });
-        
         console.log('nach manageFetching');
 
         {
