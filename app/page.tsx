@@ -1039,7 +1039,9 @@ export default function Page() {
 
             try {
                 standardCatching(handleEvents(), setErrorText);
+                console.log('starting routeActivity')
                 standardCatching(routeActivity(chatId, abortController.signal, eventBusKey, accumulatedFetching), setErrorText);
+                console.log('routeActivity started');
 
 
                 // // TODO begin repetitive test of routeActivity for memory leaks

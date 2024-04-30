@@ -1,6 +1,6 @@
 import { deprecate } from "util";
 import { StandardMsgDoc, executeMsgReq } from "../pr-msg-server/pr-msg-server";
-import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
+// import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
 import clientPromise from "../user-management-server/mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
 import { checkToken } from "../user-management-server/userManagementServer";
@@ -59,7 +59,8 @@ async function pushNotify(authUser: string, req: PushNotifyReq): Promise<ApiResp
             const pushData: PushData = {
                 caller: authUser, callee: req.callee
             }
-            const sendRes = await sendPushMessage(subscription, pushData);
+            // const sendRes = await sendPushMessage(subscription, pushData);
+            console.warn('web-push removed for testing');
         } catch (reason) {
             console.error('sendPushMessage failed: ', reason);
         }

@@ -1,7 +1,7 @@
 import { Collection, Db, WithId } from "mongodb";
 import clientPromise from "../user-management-server/mongodb";
 import { ApiResp } from "../user-management-server/user-management-common/apiRoutesCommon";
-import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
+// import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
 
 const dbName = process.env.VIDEO_DB_NAME
 console.log('dbName', dbName);
@@ -118,7 +118,8 @@ export async function executeVideoReq(db: Db, validatedUser: string, req: VideoR
                             if (calleeResp.state === 'subscribed') {
                                 const subscription = JSON.parse(calleeResp.data);
                                 try {
-                                    const sendRes = await sendPushMessage(subscription, { caller: validatedUser });
+                                    // const sendRes = await sendPushMessage(subscription, { caller: validatedUser });
+                                    console.warn('web-push removed for testing');
                                 } catch (reason) {
                                     console.warn('sendPushMessage failed: ', reason);
                                 }

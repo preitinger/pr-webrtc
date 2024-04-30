@@ -1,5 +1,5 @@
 import { StandardMsgDoc, executeMsgReq } from "../pr-msg-server/pr-msg-server";
-import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
+// import { sendPushMessage } from "../pr-push-api-server/pr-push-api-server";
 import { ApiResp } from "../user-management-client/user-management-common/apiRoutesCommon";
 import clientPromise from "../user-management-server/mongodb";
 import { checkToken } from "../user-management-server/userManagementServer";
@@ -60,7 +60,8 @@ export async function offerCall(validatedUser: string, o: OfferCallReq): Promise
         if (res != null && res.stringifiedSubscription != null) {
             const subscription = JSON.parse(res.stringifiedSubscription);
             try {
-                const sendRes = await sendPushMessage(subscription, { caller: o.caller });
+                // const sendRes = await sendPushMessage(subscription, { caller: o.caller });
+                console.warn('web-push removed for testing')
             } catch (reason) {
                 console.warn('sendPushMessage failed: ', reason);
             }
